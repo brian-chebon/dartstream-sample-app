@@ -378,12 +378,13 @@ go far broader — see their sections above):
 
 ---
 
-## Verified end-to-end (live `dartstream-prod`, 2026-06-03)
+## Verified end-to-end (live `dartstream-prod`, 2026-06-10)
 
 - **Smoke CLI:** 11 / 11 PASS across all five services.
-- **Per-service deep-dives:** auth full surface PASS; platform 34 / 36;
-  experience 11 / 11; reactive 29 / 29; persistence 18 / 1. The two failures are
-  filed backend bugs (below).
+- **Per-service deep-dives:** auth full surface PASS; platform 36 / 36 (2 skips
+  are destructive email/role ops); experience 11 / 11; reactive 29 / 29;
+  persistence 19 / 19. All green — the two previously-filed backend bugs are now
+  fixed and deployed (see below).
 - **Flutter client:** a real human account signed up, signed in, scored in the
   game, managed flags, browsed experience/reactive/persistence, and edited the
   profile/avatar — with live data in every screen.
@@ -392,17 +393,17 @@ go far broader — see their sections above):
 
 ## Known backend gaps & filed bugs
 
-Found by the deep-dives and filed for the backend QA agent (not sample-app
-issues):
+### Resolved (fixed by the backend QA agent, verified live 2026-06-10)
 
-- **Feature-flag PATCH/DELETE → 500** (`ds-platform-services`): a single bind
-  param is compared against the `uuid` id and the `varchar` flag_key in the same
-  WHERE clause, so flags can be created/read but not updated or deleted. Fix:
-  `id::text = @flagId OR flag_key = @flagId`.
-- **Logging-config save returns a phantom id** (`ds-persistence`): the
-  `ON CONFLICT DO UPDATE` upsert returns the freshly-generated id instead of the
+- ✅ **Feature-flag PATCH/DELETE → 500** (`ds-platform-services`): a single bind
+  param was compared against the `uuid` id and the `varchar` flag_key in the same
+  WHERE clause, so flags could be created/read but not updated or deleted. Fixed
+  (`id::text = @flagId OR flag_key = @flagId`); PATCH/DELETE now return 200.
+- ✅ **Logging-config save returns a phantom id** (`ds-persistence`): the
+  `ON CONFLICT DO UPDATE` upsert returned the freshly-generated id instead of the
   persisted row's id (no `RETURNING`), so a second save for the same provider
-  hands back an id that 404s. Fix: add `RETURNING *` and map the returned row.
+  handed back an id that 404'd. Fixed with `RETURNING *`; the upsert now returns
+  the persisted row's id.
 
 Other notes:
 
