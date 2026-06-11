@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Pinned to the documented repo floor (Dart 3.12.0); see README Prerequisites.
+      # Track the latest stable Dart (min 3.12.0; see README Prerequisites).
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: "3.12.0"
+          sdk: stable
       - run: dart pub get
       - run: dart analyze bin
 
@@ -27,10 +27,9 @@ jobs:
         working-directory: flutter_client
     steps:
       - uses: actions/checkout@v4
-      # Pinned to the documented floor (Flutter 3.44.0 → bundles Dart 3.12.0).
+      # Track the latest stable Flutter (min Dart 3.12.0; see README Prerequisites).
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: "3.44.0"
       - run: flutter pub get
       - run: flutter analyze

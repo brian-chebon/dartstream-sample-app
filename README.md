@@ -137,15 +137,15 @@ configured against: **`dartstream-prod`**.
 
 ## Prerequisites
 
-**Supported toolchain floor: Flutter `3.44.0` / Dart `3.12.0`** (verified building —
-`flutter build web` + `dart analyze` both green on this exact pair). The Flutter web
-client (`flutter_client`) requires Dart `>=3.12.0`, so this is a hard floor, not a
-suggestion: on an older toolchain `pub get` fails fast with a version-solve message
-(e.g. Dart `3.11.4` → "requires SDK version `^3.12.0`"). That is a toolchain mismatch,
-**not** a code defect — upgrade Flutter rather than editing constraints.
+**Tracks the latest stable Flutter/Dart; minimum Dart `3.12.0`.** CI builds on the
+`stable` channel (currently Flutter `3.44.1` / Dart `3.12.1` — last verified pair), so the
+app follows stable as it moves. The constraint floor is Dart `>=3.12.0` (what the web
+`flutter_client` needs): on an older toolchain `pub get` fails fast with a version-solve
+message (e.g. Dart `3.11.4` → "requires SDK version `^3.12.0`") — a toolchain mismatch,
+**not** a code defect, so upgrade Flutter rather than editing constraints.
 
-- Flutter `3.44.0+` (bundles Dart `3.12.0`) — pin to `3.44.0` to match CI
-- Dart SDK `3.12.0+` (only needed standalone for the `bin/` CLIs; the bundled one suffices)
+- Flutter `3.44.0+` — use the latest stable (CI does); newer is fine
+- Dart SDK `3.12.0+` (only needed standalone for the `bin/` CLIs; the Flutter-bundled one suffices)
 - A Google Chrome install (the client runs on `-d chrome` / web-server)
 
 ---

@@ -2,7 +2,7 @@ name: dartstream_smoke
 description: End-to-end smoke CLI for the DartStream dev API.
 publish_to: none
 
-# Repo floor: Dart 3.12.0 / Flutter 3.44.0 (driven by the Flutter web client). See README.
+# Min Dart 3.12.0; tracks latest stable (^ accepts newer). See README Prerequisites.
 environment:
   sdk: ^3.12.0
 
