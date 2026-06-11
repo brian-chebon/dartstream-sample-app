@@ -1,6 +1,6 @@
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dartstream.dart';
 import '../state/session.dart';
 
 /// Live read-only view of ds-experience-orchestration: profile, inventory,
@@ -15,9 +15,8 @@ class ExperienceScreen extends StatefulWidget {
 }
 
 class _ExperienceScreenState extends State<ExperienceScreen> {
-  DartstreamApi get _api => widget.session.api!;
-  String get _userId => widget.session.userId!;
-  String get _tenantId => widget.session.tenantId!;
+  DartStreamClient get _client => widget.session.client!;
+  DartStreamSession get _ds => widget.session.ds!;
 
   bool _loading = true;
   Object? _error;
@@ -38,19 +37,22 @@ class _ExperienceScreenState extends State<ExperienceScreen> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        _api.profile(userId: _userId, tenantId: _tenantId),
-        _api.inventory(userId: _userId, tenantId: _tenantId),
-        _api.activeSessions(userId: _userId, tenantId: _tenantId),
-        _api.connectors(tenantId: _tenantId),
+      // The typed experience client returns the inventory/session lists already
+      // extracted; connectors keeps its category structure, so we use the SDK's
+      // documented getJson escape hatch for that one.
+      final results = await Future.wait<Object>([
+        _client.experience.profile(_ds),
+        _client.experience.inventory(_ds),
+        _client.experience.activeSessions(_ds),
+        _client.experience.getJson(
+          '/api/v1/experience/connectors',
+          session: _ds,
+        ),
       ]);
-      final inv = results[1] as Map<String, dynamic>;
-      final invMap = (inv['inventory'] is Map ? inv['inventory'] : inv) as Map?;
       if (mounted) {
         setState(() {
           _profile = results[0] as Map<String, dynamic>;
-          _inventory =
-              (invMap?['items'] is List) ? invMap!['items'] as List : const [];
+          _inventory = results[1] as List<dynamic>;
           _sessions = results[2] as List<dynamic>;
           _connectors = results[3] as Map<String, dynamic>;
           _loading = false;

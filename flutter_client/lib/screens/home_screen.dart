@@ -1,9 +1,9 @@
 import 'dart:async';
 
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dartstream.dart';
 import '../game/dartstream_dash.dart';
 import '../state/session.dart';
 
@@ -25,6 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
   // project+environment scoping independently rather than mirroring them.
   static const _projectId = 'dartstream-dash';
   static const _environmentId = 'production';
+  static const _scope = DartStreamScope(
+    projectId: _projectId,
+    environmentId: _environmentId,
+  );
 
   late DartstreamDashGame _game;
   bool _loading = true;
@@ -39,9 +43,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _saveDebounce;
   String _resumeSummary = 'new game';
 
-  DartstreamApi get _api => widget.session.api!;
-  String get _userId => widget.session.userId!;
-  String get _tenantId => widget.session.tenantId!;
+  DartStreamClient get _client => widget.session.client!;
+  DartStreamSession get _ds => widget.session.ds!;
 
   @override
   void initState() {
@@ -57,43 +60,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _bootstrap() async {
     try {
-      final results = await Future.wait([
-        _api.profile(
-          userId: _userId,
-          tenantId: _tenantId,
-          projectId: _projectId,
-          environmentId: _environmentId,
-        ),
-        _api.featureFlags(tenantId: _tenantId),
-        _api.inventory(
-          userId: _userId,
-          tenantId: _tenantId,
-          projectId: _projectId,
-          environmentId: _environmentId,
-        ),
-        _api.loadSnapshot(
-          userId: _userId,
-          tenantId: _tenantId,
-          slotKey: _slotKey,
-          projectId: _projectId,
-          environmentId: _environmentId,
-        ),
-        _api.streamingChannels(tenantId: _tenantId),
+      // Every gameplay input comes from a live DartStream service. The typed
+      // experience/platform/reactive clients return the profile map, the flag
+      // list, the inventory items, the cloud-save snapshot, and the channels.
+      final results = await Future.wait<Object?>([
+        _client.experience.profile(_ds, scope: _scope),
+        _client.platform.listFeatureFlags(_ds),
+        _client.experience.inventory(_ds, scope: _scope),
+        _client.experience.loadSnapshot(_ds, scope: _scope, slotKey: _slotKey),
+        _client.reactive.streamingChannels(_ds),
       ]);
       final profile = results[0] as Map<String, dynamic>;
-      final flags = results[1] as Map<String, dynamic>;
-      final inventory = results[2] as Map<String, dynamic>;
+      final flagsList = results[1] as List<dynamic>;
+      final items = results[2] as List<dynamic>;
       final snapshot = results[3] as Map<String, dynamic>?;
       final channels = results[4] as List;
-
-      final flagsList = (flags['flags'] is List)
-          ? flags['flags'] as List
-          : (flags['data'] is List ? flags['data'] as List : const []);
-      final inventoryList =
-          ((inventory['inventory'] is Map) ? inventory['inventory'] : inventory)
-                  as Map?;
-      final items =
-          (inventoryList?['items'] is List) ? inventoryList!['items'] as List : const [];
 
       final payload = (snapshot?['snapshot'] is Map &&
               (snapshot!['snapshot'] as Map)['payload'] is Map)
@@ -167,13 +148,11 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _saveStatus = _SaveStatus.saving);
     _saveDebounce = Timer(const Duration(milliseconds: 500), () async {
       try {
-        await _api.saveSnapshot(
-          userId: _userId,
-          tenantId: _tenantId,
+        await _client.experience.saveSnapshot(
+          _ds,
+          scope: _scope,
           slotKey: _slotKey,
           payload: snapshot,
-          projectId: _projectId,
-          environmentId: _environmentId,
         );
         if (mounted) setState(() => _saveStatus = _SaveStatus.saved);
       } catch (_) {
@@ -186,8 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _onEvent(String type, Map<String, dynamic> payload) async {
     _setLastEvent('$type @ ${_now()}');
     try {
-      await _api.logEvent(
-        tenantId: _tenantId,
+      await _client.reactive.logEvent(
+        _ds,
         eventType: type,
         payload: {...payload, 'source': 'dartstream-dash'},
       );

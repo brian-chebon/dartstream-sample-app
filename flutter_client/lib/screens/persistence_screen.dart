@@ -1,6 +1,6 @@
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dartstream.dart';
 import '../state/session.dart';
 import '../widgets/resource_crud_section.dart';
 
@@ -23,15 +23,13 @@ class PersistenceScreen extends StatelessWidget {
       title: title,
       inputLabel: inputLabel,
       titleOf: titleOf,
-      fetch: () => s.api!.persistenceList(tenantId: s.tenantId!, subpath: path),
-      onCreate: (v) async => s.api!
-          .persistenceCreate(tenantId: s.tenantId!, subpath: path, body: body(v)),
-      onDelete: (item) => s.api!.persistenceDelete(
-          tenantId: s.tenantId!,
+      fetch: () => s.client!.persistence.list(path, session: s.ds!),
+      onCreate: (v) async =>
+          s.client!.persistence.create(path, session: s.ds!, body: body(v)),
+      onDelete: (item) => s.client!.persistence.delete(
           // path may carry a trailing slash (e.g. '/database/'); avoid '//'.
-          subpath: path.endsWith('/')
-              ? '$path${item['id']}'
-              : '$path/${item['id']}'),
+          path.endsWith('/') ? '$path${item['id']}' : '$path/${item['id']}',
+          session: s.ds!),
     );
   }
 
@@ -94,8 +92,8 @@ class _LoggingEntriesPanel extends StatefulWidget {
 }
 
 class _LoggingEntriesPanelState extends State<_LoggingEntriesPanel> {
-  DartstreamApi get _api => widget.session.api!;
-  String get _tenantId => widget.session.tenantId!;
+  DartStreamClient get _client => widget.session.client!;
+  DartStreamSession get _ds => widget.session.ds!;
 
   bool _loading = true;
   bool _busy = false;
@@ -117,8 +115,8 @@ class _LoggingEntriesPanelState extends State<_LoggingEntriesPanel> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final entries = await _api.persistenceList(
-          tenantId: _tenantId, subpath: '/logging/entries');
+      final entries =
+          await _client.persistence.list('/logging/entries', session: _ds);
       if (mounted) {
         setState(() {
           _entries = entries;
@@ -138,9 +136,9 @@ class _LoggingEntriesPanelState extends State<_LoggingEntriesPanel> {
     if (msg.isEmpty) return;
     setState(() => _busy = true);
     try {
-      await _api.persistenceCreate(
-        tenantId: _tenantId,
-        subpath: '/logging/entries',
+      await _client.persistence.create(
+        '/logging/entries',
+        session: _ds,
         body: {'level': 'info', 'message': msg, 'source': 'sample-app'},
       );
       _message.clear();
@@ -156,8 +154,7 @@ class _LoggingEntriesPanelState extends State<_LoggingEntriesPanel> {
   Future<void> _clear() async {
     setState(() => _busy = true);
     try {
-      await _api.persistenceDelete(
-          tenantId: _tenantId, subpath: '/logging/entries');
+      await _client.persistence.delete('/logging/entries', session: _ds);
       if (mounted) _snack(context, 'Log entries cleared.');
       await _load();
     } catch (e) {

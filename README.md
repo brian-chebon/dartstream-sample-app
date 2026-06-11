@@ -82,8 +82,11 @@ to **verify** ID tokens server-side (in `ds-auth`). That package is a
 This sample plays the **user/client** role, so it authenticates the way a real
 user does — hitting the same Identity Toolkit endpoints the official Firebase
 web SDK (FlutterFire) calls under the hood. The resulting ID token is identical
-and equally backend-trusted; the lightweight REST path just avoids extra
-dependencies. See [`flutter_client/lib/api/firebase_auth.dart`](flutter_client/lib/api/firebase_auth.dart).
+and equally backend-trusted. That browser-safe auth (and every service call) is
+handled by the first-party **[`dartstream_client`](https://pub.dev/packages/dartstream_client)**
+SDK — the app no longer hand-writes a client; it consumes the SDK exactly as a
+customer would (`DartStreamClient.signIn(...)` → typed `auth`/`platform`/
+`experience`/`reactive`/`persistence` clients).
 
 ---
 
@@ -121,14 +124,12 @@ configured against: **`dartstream-prod`**.
 ├── .env.example                   # config template (placeholders only)
 ├── flutter_client/
 │   └── lib/
-│       ├── config.dart         # backend hosts; API key read from --dart-define
-│       ├── api/
-│       │   ├── firebase_auth.dart   # Identity Toolkit REST: signUp / signIn
-│       │   └── dartstream.dart      # typed client for the 10 backend contracts
-│       ├── state/session.dart       # auth state + onboarding
-│       ├── screens/
+│       ├── config.dart         # DartStreamConfig.dev(); API key from --dart-define
+│       ├── state/session.dart       # holds the SDK's DartStreamConnection (auth state)
+│       ├── screens/                 # each screen calls the SDK's typed clients
 │       │   ├── login_screen.dart    # Create Account / Sign In toggle
 │       │   └── home_screen.dart     # live service panels + game host
+│       └── (auth + per-service clients come from the `dartstream_client` package)
 │       └── game/dartstream_dash.dart # Flame arcade game (flags/inventory/cloud-save driven)
 └── README.md
 ```
@@ -337,9 +338,9 @@ Every screen surfaces backend errors in a SnackBar (it does not hide failures),
 and the CRUD screens share one reusable widget
 ([`resource_crud_section.dart`](flutter_client/lib/widgets/resource_crud_section.dart)).
 
-> Browsers strip `X-User-ID` from the CORS preflight allowlist, so the client
-> passes `userId`/`tenantId` as query params on experience calls. See the note
-> in [`dartstream.dart`](flutter_client/lib/api/dartstream.dart).
+> Browsers strip `X-User-ID` from the CORS preflight allowlist, so experience
+> calls pass `userId`/`tenantId` as query params. The `dartstream_client` SDK
+> handles this for you (it derives them from the `DartStreamSession`).
 
 ### DartStream Dash (the Overview game)
 

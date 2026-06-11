@@ -1,6 +1,6 @@
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dartstream.dart';
 import '../state/session.dart';
 
 /// Live demo of the ds-platform-services feature-flag API: list, create,
@@ -16,8 +16,8 @@ class FeatureFlagsScreen extends StatefulWidget {
 }
 
 class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
-  DartstreamApi get _api => widget.session.api!;
-  String get _tenantId => widget.session.tenantId!;
+  DartStreamClient get _client => widget.session.client!;
+  DartStreamSession get _ds => widget.session.ds!;
 
   bool _loading = true;
   Object? _error;
@@ -36,7 +36,7 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
       _error = null;
     });
     try {
-      final flags = await _api.listFeatureFlags(tenantId: _tenantId);
+      final flags = await _client.platform.listFeatureFlags(_ds);
       if (mounted) {
         setState(() {
           _flags = flags;
@@ -73,7 +73,7 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
   }
 
   String _readable(Object e) {
-    if (e is DartstreamApiException) {
+    if (e is DartStreamApiException) {
       return 'HTTP ${e.statusCode}: ${e.body}';
     }
     return e.toString();
@@ -84,10 +84,10 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
     final next = !_enabled(flag);
     setState(() => _busyKeys.add(key));
     try {
-      await _api.updateFeatureFlag(
-        tenantId: _tenantId,
-        flagKey: key,
-        changes: {'enabled': next, 'status': next ? 'active' : 'inactive'},
+      await _client.platform.updateFeatureFlag(
+        _ds,
+        key,
+        updates: {'enabled': next, 'status': next ? 'active' : 'inactive'},
       );
       _snack('Flag "$key" ${next ? 'enabled' : 'disabled'}.');
       await _load();
@@ -120,7 +120,7 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
     if (confirmed != true) return;
     setState(() => _busyKeys.add(key));
     try {
-      await _api.deleteFeatureFlag(tenantId: _tenantId, flagKey: key);
+      await _client.platform.deleteFeatureFlag(_ds, key);
       _snack('Flag "$key" deleted.');
       await _load();
     } catch (e) {
@@ -134,8 +134,8 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
     final created = await showDialog<bool>(
       context: context,
       builder: (_) => _CreateFlagDialog(
-        api: _api,
-        tenantId: _tenantId,
+        client: _client,
+        ds: _ds,
         onResult: _snack,
       ),
     );
@@ -156,7 +156,7 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
           right: 16,
           bottom: 16,
           child: FloatingActionButton.extended(
-            onPressed: widget.session.api == null ? null : _create,
+            onPressed: widget.session.client == null ? null : _create,
             icon: const Icon(Icons.add),
             label: const Text('New flag'),
           ),
@@ -275,12 +275,12 @@ class _FeatureFlagsScreenState extends State<FeatureFlagsScreen> {
 
 class _CreateFlagDialog extends StatefulWidget {
   const _CreateFlagDialog({
-    required this.api,
-    required this.tenantId,
+    required this.client,
+    required this.ds,
     required this.onResult,
   });
-  final DartstreamApi api;
-  final String tenantId;
+  final DartStreamClient client;
+  final DartStreamSession ds;
   final void Function(String msg, {bool error}) onResult;
 
   @override
@@ -315,17 +315,19 @@ class _CreateFlagDialogState extends State<_CreateFlagDialog> {
       _localError = null;
     });
     try {
-      await widget.api.createFeatureFlag(
-        tenantId: widget.tenantId,
-        key: key,
-        name: name.isEmpty ? key : name,
-        description: _description.text.trim(),
-        enabled: _enabled,
+      await widget.client.platform.createFeatureFlag(
+        widget.ds,
+        flag: {
+          'key': key,
+          'name': name.isEmpty ? key : name,
+          'description': _description.text.trim(),
+          'enabled': _enabled,
+        },
       );
       widget.onResult('Flag "$key" created.');
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      final msg = e is DartstreamApiException
+      final msg = e is DartStreamApiException
           ? 'HTTP ${e.statusCode}: ${e.body}'
           : e.toString();
       if (mounted) {

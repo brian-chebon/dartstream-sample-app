@@ -1,65 +1,80 @@
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/foundation.dart';
 
-import '../api/dartstream.dart';
-import '../api/firebase_auth.dart';
+import '../config.dart';
 
 enum SessionStatus { signedOut, signingIn, signedIn, error }
 
+/// Holds the authenticated DartStream connection for the app.
+///
+/// This is exactly how a customer wires the SDK into Flutter: sign in once via
+/// [DartStreamClient.signIn] / [DartStreamClient.signUp], keep the resulting
+/// [DartStreamConnection], and call its typed clients
+/// (`client.auth` / `.platform` / `.experience` / `.reactive` / `.persistence`)
+/// from the UI — passing the [DartStreamSession] the SDK handed back. The app
+/// adds no API layer of its own; the SDK owns transport, auth, and tenancy.
 class Session extends ChangeNotifier {
   SessionStatus status = SessionStatus.signedOut;
-  String? email;
-  String? userId;
-  String? tenantId;
   String? errorMessage;
-  DartstreamApi? api;
+  DartStreamConnection? _connection;
 
-  /// Create a new account (Firebase sign-up), then onboard with the backend.
-  Future<void> signUp(String email, String password) =>
-      _authenticate(() => FirebaseAuthRest.signUp(email, password));
+  /// The live SDK connection (client + session), or null when signed out.
+  DartStreamConnection? get connection => _connection;
 
-  /// Sign in to an existing account, then sync the backend session.
-  Future<void> signIn(String email, String password) =>
-      _authenticate(() => FirebaseAuthRest.signIn(email, password));
+  /// The authenticated SDK client — use its typed clients for every call.
+  DartStreamClient? get client => _connection?.client;
+
+  /// The SDK session (idToken + userId + tenantId) passed to client calls.
+  DartStreamSession? get ds => _connection?.session;
+
+  String? get email => ds?.email;
+  String? get userId => ds?.userId;
+  String? get tenantId => ds?.tenantId;
+  bool get isSignedIn => status == SessionStatus.signedIn;
+
+  Future<void> signUp(String email, String password) => _authenticate(
+        () => DartStreamClient.signUp(
+          config: AppConfig.dartStream,
+          email: email,
+          password: password,
+        ),
+      );
+
+  Future<void> signIn(String email, String password) => _authenticate(
+        () => DartStreamClient.signIn(
+          config: AppConfig.dartStream,
+          email: email,
+          password: password,
+        ),
+      );
 
   Future<void> _authenticate(
-    Future<FirebaseAuthResult> Function() firebaseAuth,
+    Future<DartStreamConnection> Function() connect,
   ) async {
     status = SessionStatus.signingIn;
     errorMessage = null;
     notifyListeners();
     try {
-      final auth = await firebaseAuth();
-      final api = DartstreamApi(idToken: auth.idToken);
-      // signup() is idempotent on the backend (returns the existing user for a
-      // returning login), with a /login fallback on 409, so it covers both the
-      // create-account and sign-in paths. Verified end-to-end against prod.
-      final ids = await api.signup();
-      this.api = api;
-      email = auth.email;
-      userId = ids.userId;
-      tenantId = ids.tenantId;
+      _connection = await connect();
       status = SessionStatus.signedIn;
+    } on DartStreamFirebaseAuthException catch (e) {
+      status = SessionStatus.error;
+      errorMessage = e.message;
+    } on DartStreamApiException catch (e) {
+      status = SessionStatus.error;
+      errorMessage = 'HTTP ${e.statusCode}: ${e.body}';
     } catch (e) {
       status = SessionStatus.error;
-      errorMessage = _readable(e);
+      errorMessage = e.toString();
     }
     notifyListeners();
   }
 
-  String _readable(Object e) {
-    final s = e.toString();
-    return s.startsWith('FirebaseAuthException: ')
-        ? s.substring('FirebaseAuthException: '.length)
-        : s;
-  }
-
   void signOut() {
+    _connection?.client.close();
+    _connection = null;
     status = SessionStatus.signedOut;
-    email = null;
-    userId = null;
-    tenantId = null;
     errorMessage = null;
-    api = null;
     notifyListeners();
   }
 }

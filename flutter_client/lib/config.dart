@@ -1,30 +1,21 @@
-/// Hosts and Firebase config for the deployed DartStream dev environment.
+import 'package:dartstream_client/dartstream_client.dart';
+
+/// App configuration for the DartStream sample.
 ///
-/// The smoke CLI in ../bin/smoke.dart proved these against the live backend.
+/// Hosts, transport, auth, and tenant/session handling all live in the
+/// `dartstream_client` SDK — the app only supplies the public Firebase web API
+/// key (injected at build time, never committed):
+///   flutter run -d chrome --web-port=3000 --dart-define=FIREBASE_API_KEY=YOUR_KEY
 ///
 /// Firebase project: dartstream-prod (Sample-App-Brian-Chebon web app).
-///   projectId        : dartstream-prod
-///   authDomain       : dartstream-prod.firebaseapp.com
-///   storageBucket    : dartstream-prod.firebasestorage.app
-///   messagingSenderId: 1005239553190
-///   appId            : 1:1005239553190:web:e7678b81234c367e59b867
-///   measurementId    : G-L63SXSDVQR
-/// Only the web API key is consumed here — auth goes straight to the Identity
-/// Toolkit REST API, which needs nothing else from the config above.
-///
-/// The key is injected at build/run time and is NOT committed. Pass it via:
-///   flutter run -d chrome --web-port=3000 --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY
-/// (after `set -a && source ../.env && set +a`). Empty here fails fast below.
 class AppConfig {
-  static const firebaseApiKey =
-      String.fromEnvironment('FIREBASE_API_KEY');
+  static const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
 
   /// Whether a key was actually injected; the login flow surfaces this.
   static bool get hasFirebaseApiKey => firebaseApiKey.isNotEmpty;
 
-  static const authHost = 'https://dev-apiauth.dartstream.io';
-  static const platformHost = 'https://dev-apiplatform.dartstream.io';
-  static const experienceHost = 'https://dev-apiexperience.dartstream.io';
-  static const reactiveHost = 'https://dev-apireactive.dartstream.io';
-  static const persistenceHost = 'https://dev-apipersistence.dartstream.io';
+  /// The DartStream SaaS dev environment, wired with our Firebase web key.
+  /// Swap `.dev()` for `.prod()` to point at production.
+  static DartStreamConfig get dartStream =>
+      DartStreamConfig.dev(firebaseApiKey: firebaseApiKey);
 }
