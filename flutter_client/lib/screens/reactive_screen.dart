@@ -1,6 +1,6 @@
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dartstream.dart';
 import '../state/session.dart';
 import '../widgets/resource_crud_section.dart';
 
@@ -23,15 +23,13 @@ class ReactiveScreen extends StatelessWidget {
       title: title,
       inputLabel: inputLabel,
       titleOf: titleOf,
-      fetch: () => s.api!.reactiveList(tenantId: s.tenantId!, subpath: path),
-      onCreate: (v) async => s.api!
-          .reactiveCreate(tenantId: s.tenantId!, subpath: path, body: body(v)),
-      onDelete: (item) => s.api!.reactiveDelete(
-          tenantId: s.tenantId!,
+      fetch: () => s.client!.reactive.list(s.ds!, path),
+      onCreate: (v) async =>
+          s.client!.reactive.create(s.ds!, path, body: body(v)),
+      onDelete: (item) => s.client!.reactive.delete(
+          s.ds!,
           // path may carry a trailing slash (e.g. '/lifecycle/'); avoid '//'.
-          subpath: path.endsWith('/')
-              ? '$path${item['id']}'
-              : '$path/${item['id']}'),
+          path.endsWith('/') ? '$path${item['id']}' : '$path/${item['id']}'),
     );
   }
 
@@ -90,8 +88,8 @@ class _EventsPanel extends StatefulWidget {
 }
 
 class _EventsPanelState extends State<_EventsPanel> {
-  DartstreamApi get _api => widget.session.api!;
-  String get _tenantId => widget.session.tenantId!;
+  DartStreamClient get _client => widget.session.client!;
+  DartStreamSession get _ds => widget.session.ds!;
 
   bool _loading = true;
   List<dynamic> _events = const [];
@@ -106,8 +104,7 @@ class _EventsPanelState extends State<_EventsPanel> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final events =
-          await _api.reactiveList(tenantId: _tenantId, subpath: '/events/log');
+      final events = await _client.reactive.list(_ds, '/events/log');
       if (mounted) {
         setState(() {
           _events = events;
@@ -125,8 +122,8 @@ class _EventsPanelState extends State<_EventsPanel> {
   Future<void> _logEvent() async {
     setState(() => _logging = true);
     try {
-      await _api.logEvent(
-        tenantId: _tenantId,
+      await _client.reactive.logEvent(
+        _ds,
         eventType: 'demo.button.click',
         payload: {'at': DateTime.now().toUtc().toIso8601String()},
       );

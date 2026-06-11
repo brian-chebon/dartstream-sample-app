@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
+import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/material.dart';
 
-import '../api/dartstream.dart';
 import '../state/session.dart';
 
 /// Live demo of the ds-auth user surface: the user record (with editable
@@ -22,9 +22,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
       'AAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
-  DartstreamApi get _api => widget.session.api!;
-  String get _userId => widget.session.userId!;
-  String get _tenantId => widget.session.tenantId!;
+  DartStreamClient get _client => widget.session.client!;
+  DartStreamSession get _ds => widget.session.ds!;
 
   bool _loading = true;
   bool _busy = false;
@@ -52,10 +51,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        _api.getUser(userId: _userId, tenantId: _tenantId),
-        _api.userSessions(userId: _userId, tenantId: _tenantId),
-        _api.avatarBytes(userId: _userId, tenantId: _tenantId),
+      final results = await Future.wait<Object?>([
+        _client.auth.getUser(_ds),
+        _client.auth.userSessions(_ds),
+        _client.auth.avatarBytes(_ds),
       ]);
       if (mounted) {
         setState(() {
@@ -87,10 +86,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _saveName() async {
     setState(() => _busy = true);
     try {
-      await _api.updateUser(
-        userId: _userId,
-        tenantId: _tenantId,
-        changes: {'displayName': _displayName.text.trim()},
+      await _client.auth.updateUser(
+        _ds,
+        displayName: _displayName.text.trim(),
       );
       if (mounted) _snack('Display name updated.');
       await _load();
@@ -104,10 +102,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _setAvatar() async {
     setState(() => _busy = true);
     try {
-      await _api.uploadAvatar(
-        userId: _userId,
-        tenantId: _tenantId,
-        imageDataUrl: _demoPng,
+      await _client.auth.uploadAvatar(
+        _ds,
+        image: _demoPng,
         contentType: 'image/png',
       );
       if (mounted) _snack('Avatar set.');
@@ -122,7 +119,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _removeAvatar() async {
     setState(() => _busy = true);
     try {
-      await _api.deleteAvatar(userId: _userId, tenantId: _tenantId);
+      await _client.auth.deleteAvatar(_ds);
       if (mounted) _snack('Avatar removed.');
       await _load();
     } catch (e) {
@@ -137,8 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (id.isEmpty) return;
     setState(() => _busy = true);
     try {
-      await _api.revokeSession(
-          userId: _userId, tenantId: _tenantId, sessionId: id);
+      await _client.auth.revokeSession(_ds, id);
       if (mounted) _snack('Session revoked.');
       await _load();
     } catch (e) {
@@ -168,7 +164,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (ok != true) return;
     setState(() => _busy = true);
     try {
-      await _api.revokeAllSessions(userId: _userId, tenantId: _tenantId);
+      await _client.auth.revokeAllSessions(_ds);
       if (mounted) _snack('All sessions revoked.');
       await _load();
     } catch (e) {
