@@ -20,7 +20,7 @@ jobs:
       - run: dart analyze bin
 
   client:
-    name: analyze Flutter client
+    name: analyze + build Flutter client
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -33,3 +33,6 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter analyze
+      # Web-compilation gate: proves the app (and the dartstream_client SDK it
+      # consumes) stays browser-safe. The key is a dummy — no network calls run.
+      - run: flutter build web --dart-define=FIREBASE_API_KEY=dummy

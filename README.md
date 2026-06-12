@@ -1,10 +1,18 @@
 # DartStream Sample App
 
 An end-to-end sample that proves **real users can sign up, sign in, and use the
-live DartStream backend** (`dartstream-prod`) across its auth, platform,
-experience, and reactive services. It exists to exercise DartStream the way an
-actual client does — not with mocks — so regressions in the deployed contracts
-show up immediately.
+live DartStream backend** across its auth, platform, experience, reactive, and
+persistence services. It exists to exercise DartStream the way an actual client
+does — not with mocks — so regressions in the deployed contracts show up
+immediately.
+
+> **Which environment is this?** Identity is the **`dartstream-prod` Firebase
+> project** (the only issuer the backend trusts — see
+> [below](#firebase-project-it-must-be-dartstream-prod)), but the DartStream
+> services themselves are the SaaS **dev environment**:
+> `DartStreamConfig.dev()` in the Flutter client and the
+> `dev-api*.dartstream.io` defaults in `.env`. "Live" throughout this README
+> means the deployed dev backend, not DartStream production.
 
 It ships four artifacts:
 
@@ -26,6 +34,15 @@ It ships four artifacts:
    [Flame](https://flame-engine.org) arcade game whose rules are driven by live
    DartStream services (feature flags, inventory, cloud-save, reactive events).
 
+> **Which artifact is the customer reference?** The **Flutter client** — it
+> consumes the first-party
+> [`dartstream_client`](https://pub.dev/packages/dartstream_client) SDK exactly
+> as a customer would. The `bin/` CLIs are **low-level contract probes**, not
+> SDK examples: they deliberately hand-write the Firebase REST calls, raw
+> `Authorization`/tenant headers, and service URLs with `package:http` so they
+> can verify the deployed HTTP contracts independently of the SDK. Don't copy
+> them into an app.
+
 ---
 
 ## Table of contents
@@ -41,7 +58,7 @@ It ships four artifacts:
 - [Running the experience / reactive / persistence deep-dives](#running-the-experience--reactive--persistence-deep-dives)
 - [Running the Flutter + Flame client](#running-the-flutter--flame-client)
 - [Smoke CLI coverage](#smoke-cli-coverage)
-- [Verified end-to-end](#verified-end-to-end-live-dartstream-prod-2026-06-03)
+- [Verified end-to-end](#verified-end-to-end-live-dev-environment-2026-06-10)
 - [Known backend gaps & filed bugs](#known-backend-gaps--filed-bugs)
 - [License](#license)
 
@@ -94,6 +111,13 @@ customer would (`DartStreamClient.signIn(...)` → typed `auth`/`platform`/
 
 The backend only trusts ID tokens issued by the Firebase project it was
 configured against: **`dartstream-prod`**.
+
+Note the split: `dartstream-prod` names the **Firebase identity project only**,
+not the DartStream environment this sample targets. The service calls go to the
+SaaS **dev** hosts (`DartStreamConfig.dev()` /
+`dev-api*.dartstream.io`) — swap `.dev()` for `.prod()` in
+[`flutter_client/lib/config.dart`](flutter_client/lib/config.dart) (and the
+`API_*` URLs in `.env`) to point the same app at production.
 
 | Field | Value |
 | --- | --- |
@@ -386,7 +410,7 @@ go far broader — see their sections above):
 
 ---
 
-## Verified end-to-end (live `dartstream-prod`, 2026-06-10)
+## Verified end-to-end (live dev environment, 2026-06-10)
 
 - **Smoke CLI:** 11 / 11 PASS across all five services.
 - **Per-service deep-dives:** auth full surface PASS; platform 36 / 36 (2 skips

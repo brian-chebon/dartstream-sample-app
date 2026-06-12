@@ -1,5 +1,5 @@
 name: dartstream_flutter_client
-description: "A new Flutter project."
+description: "DartStream sample Flutter web client — signs in and drives every DartStream SaaS service (feature flags, experience, reactive, persistence, and the DartStream Dash game) through the first-party dartstream_client SDK."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
