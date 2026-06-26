@@ -5,8 +5,8 @@
 // an OAuth2 client_credentials grant, exchanging a clientId + clientSecret for a
 // DartStream-signed Bearer JWT and calling the live services with it.
 //
-// Create the client in the dashboard (Settings -> API Credentials / Applications
-// -> Create OAuth2 Client), copy the clientId + clientSecret once, then:
+// Create the client in the dashboard (Settings -> Applications -> Create OAuth2
+// Client), copy the clientId + clientSecret once, then:
 //
 //   set -a && source .env && set +a
 //   dart run bin/oauth2_deepdive.dart
@@ -35,8 +35,8 @@ void main(List<String> args) async {
   final clientSecret = env['OAUTH2_CLIENT_SECRET']?.trim();
 
   if (clientId == null || clientId.isEmpty) {
-    _fatal('OAUTH2_CLIENT_ID not set (create a client in Settings -> API '
-        'Credentials and export it).');
+    _fatal('OAUTH2_CLIENT_ID not set (create a client in Settings -> '
+        'Applications and export it).');
   }
   if (clientSecret == null || clientSecret.isEmpty) {
     _fatal('OAUTH2_CLIENT_SECRET not set (shown once at creation — re-create '
