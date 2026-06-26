@@ -145,6 +145,7 @@ SaaS **dev** hosts (`DartStreamConfig.dev()` /
 ├── bin/experience_deepdive.dart   # deep-dive: ds-experience-orchestration
 ├── bin/reactive_deepdive.dart     # deep-dive: ds-reactive-dataflow
 ├── bin/persistence_deepdive.dart  # deep-dive: ds-persistence
+├── bin/oauth2_deepdive.dart       # deep-dive: OAuth2 client_credentials (machine-to-machine, no Firebase user)
 ├── .env.example                   # config template (placeholders only)
 ├── flutter_client/
 │   └── lib/
@@ -299,10 +300,35 @@ dart run bin/reactive_deepdive.dart      # events, streaming, notifications, lif
 dart run bin/persistence_deepdive.dart   # database connections, storage configs, logging
 ```
 
-Each bootstraps a tenant, exercises every endpoint in its service, and prints a
-`PASS/FAIL/SKIP` table. CRUD groups self-clean. As of 2026-06-03: experience
-11/11 and reactive 29/29 are fully green; persistence has one known
-backend bug (logging-config save returns a non-persistent id on the upsert
+### OAuth2 / machine-to-machine (`bin/oauth2_deepdive.dart`)
+
+Every deep-dive above signs in a **human** (Firebase ID token). DartStream also
+ships the **server-to-server** path (GitLab #96): pay → create an *Application* in
+the dashboard → mint a `clientId` + `clientSecret` → exchange them for a
+DartStream-signed Bearer JWT and call any service **with no logged-in user**.
+
+```sh
+# 1. In the dashboard: Settings -> API Credentials -> Create OAuth2 Client.
+#    Copy the clientId + clientSecret (shown once). Leave the expiry/Date BLANK
+#    unless you set a clearly future timestamp.
+# 2. Put them in your gitignored .env (never commit the secret):
+#      OAUTH2_CLIENT_ID=client_...
+#      OAUTH2_CLIENT_SECRET=secret_...
+#      API_BILLING=https://dev-apibilling.dartstream.io
+set -a && source .env && set +a
+dart run bin/oauth2_deepdive.dart   # token exchange -> read platform/experience/reactive/persistence
+```
+
+It POSTs `grant_type=client_credentials` to `/api/v1/oauth2/token` (HTTP Basic),
+decodes the returned JWT's tenant + scope claims, then calls each service with
+**only** that Bearer token — no Firebase ID token, no `X-Tenant-ID` header. The
+`clientSecret` is confidential: backends / CLIs / CI only, **never** a browser or
+Flutter bundle.
+
+Each Firebase deep-dive bootstraps a tenant, exercises every endpoint in its
+service, and prints a `PASS/FAIL/SKIP` table. CRUD groups self-clean. As of
+2026-06-03: experience 11/11 and reactive 29/29 are fully green; persistence has
+one known backend bug (logging-config save returns a non-persistent id on the upsert
 update path — filed as a SaaS ticket).
 
 ---
