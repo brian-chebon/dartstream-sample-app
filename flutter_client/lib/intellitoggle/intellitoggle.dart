@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:openfeature_provider_intellitoggle/openfeature_provider_intellitoggle.dart';
 
 import '../config.dart';
@@ -5,20 +6,30 @@ import '../config.dart';
 /// Thin app-level wrapper around the **IntelliToggle** OpenFeature provider.
 ///
 /// IntelliToggle is Aortem's feature-flag SaaS. Unlike DartStream's own
-/// `platform.featureFlags` (tenant-facing CRUD), here we evaluate flags through
-/// the standard [OpenFeature] API: register the [IntelliToggleProvider] once and
-/// read values via the active provider. The provider performs the OAuth2
-/// **client-credentials** handshake (clientId + clientSecret + tenantId)
-/// internally — the app never mints a token by hand.
+/// `platform.featureFlags` (tenant-facing CRUD), here we exercise the full
+/// OpenFeature *client* surface against the live provider:
+///
+///  * register the [IntelliToggleProvider] (OAuth2 client-credentials, handled
+///    internally — the app never mints a token by hand),
+///  * evaluate every flag type through an [OpenFeature] **client** so the hook
+///    pipeline runs (a [ConsoleLoggingHook] feeds the in-app telemetry log and
+///    the [IntelliToggleTelemetryHook] emits OTel spans/counters),
+///  * drive **targeting** by editing the global evaluation context,
+///  * record analytics with the OpenFeature **tracking** API.
 ///
 /// Registration is global (OpenFeature keeps a single active provider), so this
-/// is a process-wide singleton that registers lazily and is safe to call into
-/// from any screen.
+/// is a process-wide singleton that registers lazily.
 class IntelliToggle {
   IntelliToggle._();
   static final IntelliToggle instance = IntelliToggle._();
 
   bool _registered = false;
+  FeatureClient? _client;
+  IntelliToggleOptions? _options;
+  Map<String, dynamic> _targeting = const {};
+
+  /// Live, capped feed of OpenFeature hook lifecycle lines (the telemetry log).
+  final ValueNotifier<List<String>> logs = ValueNotifier<List<String>>(const []);
 
   /// Whether the OAuth client-credentials were injected at build time.
   bool get isConfigured => AppConfig.hasIntelliToggle;
@@ -29,11 +40,23 @@ class IntelliToggle {
   /// The active OpenFeature provider — only valid once [register] has run.
   FeatureProvider get provider => OpenFeatureAPI().provider;
 
-  /// Register the IntelliToggle provider with OpenFeature (idempotent).
-  ///
-  /// [targeting] becomes the global evaluation context, so every flag is scored
-  /// against the signed-in identity (we pass the DartStream user/tenant through,
-  /// connecting the two SaaS products).
+  // ---- provider configuration (surfaced in the UI) ------------------------
+  IntelliToggleOptions? get options => _options;
+  Uri? get baseUri => _options?.baseUri;
+  Duration? get timeout => _options?.timeout;
+  Duration? get cacheTtl => _options?.cacheTtl;
+  bool get streaming => _options?.enableStreaming ?? false;
+  bool get polling => _options?.enablePolling ?? false;
+
+  /// dev-api.* vs api.* — the host the provider was pointed at.
+  String get environment =>
+      (_options?.baseUri.host ?? '').startsWith('dev-') ? 'development' : 'production';
+
+  /// The active targeting / evaluation context.
+  Map<String, dynamic> get targeting => Map.unmodifiable(_targeting);
+
+  /// Register the IntelliToggle provider with OpenFeature (idempotent), wire up
+  /// the hook pipeline, and seed the targeting context.
   Future<void> register({Map<String, dynamic>? targeting}) async {
     if (!isConfigured) {
       throw StateError(
@@ -42,26 +65,98 @@ class IntelliToggle {
       );
     }
     if (!_registered) {
+      _options = IntelliToggleOptions.production(
+        baseUri: Uri.parse(AppConfig.intelliToggleApiUrl),
+      );
       final provider = IntelliToggleProvider(
         clientId: AppConfig.intelliToggleClientId,
         clientSecret: AppConfig.intelliToggleClientSecret,
         tenantId: AppConfig.intelliToggleTenantId,
-        options: IntelliToggleOptions.production(
-          baseUri: Uri.parse(AppConfig.intelliToggleApiUrl),
-        ),
+        options: _options!,
       );
       await OpenFeatureAPI().setProvider(provider);
       _registered = true;
     }
-    if (targeting != null) {
-      OpenFeatureAPI().setGlobalContext(OpenFeatureEvaluationContext(targeting));
-    }
+    applyTargeting(targeting ?? _targeting);
   }
 
-  // ---- typed evaluation helpers -------------------------------------------
-  // Each returns the full FlagEvaluationResult so callers can surface the
-  // value *and* the reason / variant / error (house style: never hide errors).
+  /// Replace the global targeting context and rebuild the hooked client so
+  /// subsequent evaluations (and the flag-aware widgets) are re-scored.
+  void applyTargeting(Map<String, dynamic> targeting) {
+    final m = Map<String, dynamic>.from(targeting);
+    // OpenFeature requires a targetingKey for client-side evaluation; synthesize
+    // one from the identity if the caller didn't supply it explicitly.
+    if (!m.containsKey('targetingKey') && !m.containsKey('key')) {
+      final tk = m['userId'] ?? m['email'] ?? m['tenantId'];
+      if (tk != null) m['targetingKey'] = '$tk';
+    }
+    _targeting = m;
+    OpenFeatureAPI().setGlobalContext(OpenFeatureEvaluationContext(_targeting));
+    _rebuildClient();
+  }
 
+  void _rebuildClient() {
+    final client = OpenFeatureAPI().getClient('intellitoggle');
+    // Hooks fire only when evaluating through a client. ConsoleLoggingHook's
+    // structured lines feed the in-app telemetry panel; the telemetry hook
+    // records OTel spans + an evaluation counter.
+    client.addHook(ConsoleLoggingHook(
+      printContext: true,
+      domain: 'intellitoggle',
+      logger: _appendLog,
+    ));
+    client.addHook(IntelliToggleTelemetryHook());
+    _client = client;
+  }
+
+  void _appendLog(String message) {
+    final next = List<String>.from(logs.value)..add(message);
+    if (next.length > 100) next.removeRange(0, next.length - 100);
+    logs.value = next;
+  }
+
+  void clearLogs() => logs.value = const [];
+
+  EvaluationContext get _evalContext =>
+      EvaluationContext(attributes: _targeting.map((k, v) => MapEntry(k, '$v')));
+
+  // ---- client-based evaluation (runs the hook pipeline) -------------------
+  // Returns the full FlagEvaluationDetails so callers surface value *and*
+  // reason / variant / error (house style: never hide errors).
+  Future<FlagEvaluationDetails<bool>> evalBoolean(String key, {bool def = false}) =>
+      _client!.getBooleanDetails(key, defaultValue: def, context: _evalContext);
+
+  Future<FlagEvaluationDetails<String>> evalString(String key, {String def = ''}) =>
+      _client!.getStringDetails(key, defaultValue: def, context: _evalContext);
+
+  Future<FlagEvaluationDetails<int>> evalInteger(String key, {int def = 0}) =>
+      _client!.getIntegerDetails(key, defaultValue: def, context: _evalContext);
+
+  Future<FlagEvaluationDetails<double>> evalDouble(String key, {double def = 0}) =>
+      _client!.getDoubleDetails(key, defaultValue: def, context: _evalContext);
+
+  Future<FlagEvaluationDetails<Map<String, dynamic>>> evalObject(
+    String key, {
+    Map<String, dynamic> def = const {},
+  }) =>
+      _client!.getObjectDetails(key, defaultValue: def, context: _evalContext);
+
+  /// Record an analytics event through the OpenFeature tracking API (spec §6).
+  /// The provider forwards it to IntelliToggle's analytics backend where
+  /// supported; otherwise it is a safe no-op.
+  Future<void> track(
+    String eventName, {
+    num? value,
+    Map<String, dynamic> attributes = const {},
+  }) =>
+      provider.track(
+        eventName,
+        evaluationContext: _targeting,
+        trackingDetails:
+            TrackingEventDetails(value: value?.toDouble(), attributes: attributes),
+      );
+
+  // ---- provider-path helpers (used by the flag-aware widgets) -------------
   Future<FlagEvaluationResult<bool>> getBoolean(
     String flagKey, {
     bool defaultValue = false,
@@ -75,25 +170,4 @@ class IntelliToggle {
     Map<String, dynamic>? context,
   }) =>
       provider.getStringFlag(flagKey, defaultValue, context: context);
-
-  Future<FlagEvaluationResult<int>> getInteger(
-    String flagKey, {
-    int defaultValue = 0,
-    Map<String, dynamic>? context,
-  }) =>
-      provider.getIntegerFlag(flagKey, defaultValue, context: context);
-
-  Future<FlagEvaluationResult<double>> getDouble(
-    String flagKey, {
-    double defaultValue = 0,
-    Map<String, dynamic>? context,
-  }) =>
-      provider.getDoubleFlag(flagKey, defaultValue, context: context);
-
-  Future<FlagEvaluationResult<Map<String, dynamic>>> getObject(
-    String flagKey, {
-    Map<String, dynamic> defaultValue = const {},
-    Map<String, dynamic>? context,
-  }) =>
-      provider.getObjectFlag(flagKey, defaultValue, context: context);
 }

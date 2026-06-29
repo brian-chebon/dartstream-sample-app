@@ -5,12 +5,13 @@ import '../intellitoggle/flag_aware.dart';
 import '../intellitoggle/intellitoggle.dart';
 import '../state/session.dart';
 
-/// Live demo of **IntelliToggle** — Aortem's feature-flag SaaS — evaluated
-/// through the standard OpenFeature provider (OAuth2 client-credentials). This
-/// is distinct from the "Feature flags" screen, which drives DartStream's own
+/// Live demo of **IntelliToggle** — Aortem's feature-flag SaaS — exercised
+/// through the full OpenFeature client surface (OAuth2 client-credentials).
+/// Distinct from the "Feature flags" screen, which drives DartStream's own
 /// `platform.featureFlags` CRUD. Here we register the IntelliToggle provider,
-/// score flags against the signed-in DartStream identity, and surface the full
-/// evaluation result (value + reason + variant + any error).
+/// edit the targeting context, evaluate every flag type (with the hook pipeline
+/// feeding a live telemetry log), record analytics via the tracking API, and
+/// render flag-aware widgets.
 class IntelliToggleScreen extends StatefulWidget {
   const IntelliToggleScreen({super.key, required this.session});
   final Session session;
@@ -20,6 +21,18 @@ class IntelliToggleScreen extends StatefulWidget {
 }
 
 enum _FlagType { boolean, string, integer, double_, object }
+
+class _AttrRow {
+  _AttrRow(String key, String value)
+      : keyCtl = TextEditingController(text: key),
+        valueCtl = TextEditingController(text: value);
+  final TextEditingController keyCtl;
+  final TextEditingController valueCtl;
+  void dispose() {
+    keyCtl.dispose();
+    valueCtl.dispose();
+  }
+}
 
 class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
   bool _registering = true;
@@ -31,23 +44,45 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
   String? _result;
   bool _resultIsError = false;
 
+  final List<_AttrRow> _targetingRows = [];
+  int _widgetRev = 0;
+
+  final _trackNameController = TextEditingController(text: 'demo_event');
+  final _trackValueController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
+    final s = widget.session;
+    // targetingKey is the OpenFeature targeting primitive — seed it from identity.
+    _targetingRows.add(_AttrRow(
+        'targetingKey', s.userId ?? s.email ?? 'anonymous'));
+    if (s.email != null) _targetingRows.add(_AttrRow('email', s.email!));
+    if (s.tenantId != null) _targetingRows.add(_AttrRow('tenantId', s.tenantId!));
+    _targetingRows.add(_AttrRow('plan', 'premium'));
     _register();
   }
 
   @override
   void dispose() {
     _keyController.dispose();
+    _trackNameController.dispose();
+    _trackValueController.dispose();
+    for (final r in _targetingRows) {
+      r.dispose();
+    }
     super.dispose();
   }
 
-  Map<String, dynamic> get _targeting => {
-        if (widget.session.userId != null) 'userId': widget.session.userId,
-        if (widget.session.email != null) 'email': widget.session.email,
-        if (widget.session.tenantId != null) 'tenantId': widget.session.tenantId,
-      };
+  Map<String, dynamic> _targetingMap() {
+    final map = <String, dynamic>{};
+    for (final r in _targetingRows) {
+      final k = r.keyCtl.text.trim();
+      final v = r.valueCtl.text.trim();
+      if (k.isNotEmpty) map[k] = v;
+    }
+    return map;
+  }
 
   Future<void> _register() async {
     if (!IntelliToggle.instance.isConfigured) {
@@ -59,7 +94,7 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
       _registerError = null;
     });
     try {
-      await IntelliToggle.instance.register(targeting: _targeting);
+      await IntelliToggle.instance.register(targeting: _targetingMap());
       if (mounted) setState(() => _registering = false);
     } catch (e) {
       if (mounted) {
@@ -71,6 +106,14 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
     }
   }
 
+  void _applyTargeting() {
+    IntelliToggle.instance.applyTargeting(_targetingMap());
+    setState(() => _widgetRev++);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Targeting context applied — re-evaluating')),
+    );
+  }
+
   Future<void> _evaluate() async {
     final key = _keyController.text.trim();
     if (key.isEmpty) return;
@@ -80,24 +123,30 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
       _resultIsError = false;
     });
     try {
-      final String text;
+      final FlagEvaluationDetails details;
       switch (_type) {
         case _FlagType.boolean:
-          text = _format(await IntelliToggle.instance.getBoolean(key));
+          details = await IntelliToggle.instance.evalBoolean(key);
         case _FlagType.string:
-          text = _format(await IntelliToggle.instance.getString(key));
+          details = await IntelliToggle.instance.evalString(key);
         case _FlagType.integer:
-          text = _format(await IntelliToggle.instance.getInteger(key));
+          details = await IntelliToggle.instance.evalInteger(key);
         case _FlagType.double_:
-          text = _format(await IntelliToggle.instance.getDouble(key));
+          details = await IntelliToggle.instance.evalDouble(key);
         case _FlagType.object:
-          text = _format(await IntelliToggle.instance.getObject(key));
+          details = await IntelliToggle.instance.evalObject(key);
       }
-      if (mounted) setState(() => _result = text);
+      final isErr = details.errorCode != null;
+      if (mounted) {
+        setState(() {
+          _result = _format(details);
+          _resultIsError = isErr;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _result = e.toString();
+          _result = '${_classify(e)}\n$e';
           _resultIsError = true;
         });
       }
@@ -106,13 +155,42 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
     }
   }
 
-  String _format(FlagEvaluationResult res) {
+  Future<void> _track() async {
+    final name = _trackNameController.text.trim();
+    if (name.isEmpty) return;
+    final raw = _trackValueController.text.trim();
+    final value = raw.isEmpty ? null : num.tryParse(raw);
+    try {
+      await IntelliToggle.instance.track(name, value: value);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Tracked "$name" via OpenFeature tracking API')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Track failed: $e')));
+      }
+    }
+  }
+
+  String _classify(Object e) {
+    if (e is AuthenticationException) return '[auth] OAuth/client-credentials rejected';
+    if (e is FlagNotFoundException) return '[not-found] flag does not exist in the tenant';
+    if (e is TypeMismatchException) return '[type-mismatch] flag is a different type';
+    if (e is ApiException) return '[api] IntelliToggle API error';
+    return '[error]';
+  }
+
+  String _format(FlagEvaluationDetails res) {
     final lines = <String>[
       'value: ${res.value}',
-      'reason: ${res.reason}',
+      if (res.reason != null) 'reason: ${res.reason}',
       if (res.variant != null) 'variant: ${res.variant}',
       if (res.errorCode != null) 'errorCode: ${res.errorCode}',
       if (res.errorMessage != null) 'errorMessage: ${res.errorMessage}',
+      'at: ${res.timestamp.toIso8601String()}',
     ];
     return lines.join('\n');
   }
@@ -170,13 +248,18 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
       );
 
   Widget _ready() {
-    final provider = IntelliToggle.instance.provider;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       children: [
-        _statusCard(provider),
+        _statusCard(IntelliToggle.instance.provider),
+        const SizedBox(height: 16),
+        _targetingCard(),
         const SizedBox(height: 16),
         _evaluatorCard(),
+        const SizedBox(height: 16),
+        _trackCard(),
+        const SizedBox(height: 16),
+        _telemetryCard(),
         const SizedBox(height: 16),
         _widgetDemoCard(),
       ],
@@ -184,7 +267,20 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
   }
 
   Widget _statusCard(FeatureProvider provider) {
+    final it = IntelliToggle.instance;
     final ready = provider.state == ProviderState.READY;
+    Widget row(String k, String v) => Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 96, child: Text(k, style: Theme.of(context).textTheme.bodySmall)),
+              Expanded(
+                  child: Text(v,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12))),
+            ],
+          ),
+        );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -205,14 +301,92 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 4),
+            Text('OAuth2 client-credentials via OpenFeature.',
+                style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
+            row('environment', it.environment),
+            row('endpoint', it.baseUri?.toString() ?? '—'),
+            row('timeout', '${it.timeout?.inSeconds ?? '—'}s'),
+            row('cache TTL', '${it.cacheTtl?.inSeconds ?? '—'}s'),
+            row('streaming', '${it.streaming}'),
+            row('polling', '${it.polling}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _targetingCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Targeting context',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
             Text(
-              'Evaluating via OpenFeature with OAuth2 client-credentials. '
-              'Targeting: ${_targeting.isEmpty ? '(anonymous)' : _targeting}',
+              'Attributes flags are scored against (seeded from your signed-in '
+              'DartStream identity). Edit or add attributes, then apply.',
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            for (int i = 0; i < _targetingRows.length; i++) _attrRow(i),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => setState(
+                      () => _targetingRows.add(_AttrRow('', ''))),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add attribute'),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: _applyTargeting,
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Apply targeting'),
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _attrRow(int i) {
+    final row = _targetingRows[i];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: row.keyCtl,
+              decoration: const InputDecoration(
+                  labelText: 'key', isDense: true, border: OutlineInputBorder()),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: TextField(
+              controller: row.valueCtl,
+              decoration: const InputDecoration(
+                  labelText: 'value', isDense: true, border: OutlineInputBorder()),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove',
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => setState(() {
+              _targetingRows.removeAt(i).dispose();
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -226,6 +400,9 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
           children: [
             Text('Evaluate a flag',
                 style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text('Runs through the OpenFeature client, so the hooks below fire.',
+                style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -293,6 +470,115 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
     );
   }
 
+  Widget _trackCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Track an event',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'OpenFeature tracking API (spec §6) → IntelliToggle analytics. '
+              'Scored against the current targeting context.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _trackNameController,
+                    decoration: const InputDecoration(
+                        labelText: 'Event name',
+                        isDense: true,
+                        border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _trackValueController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                        labelText: 'value (opt)',
+                        isDense: true,
+                        border: OutlineInputBorder()),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: _track,
+                  icon: const Icon(Icons.bar_chart, size: 18),
+                  label: const Text('Track'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _telemetryCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Telemetry · hooks',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => IntelliToggle.instance.clearLogs(),
+                  icon: const Icon(Icons.clear_all, size: 18),
+                  label: const Text('Clear'),
+                ),
+              ],
+            ),
+            Text(
+              'Live OpenFeature hook lifecycle (before / after / finally / error) '
+              'from ConsoleLoggingHook + IntelliToggleTelemetryHook (OTel spans).',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            ValueListenableBuilder<List<String>>(
+              valueListenable: IntelliToggle.instance.logs,
+              builder: (context, logs, _) {
+                if (logs.isEmpty) {
+                  return Text('No evaluations yet — run one above.',
+                      style: Theme.of(context).textTheme.bodySmall);
+                }
+                final recent = logs.reversed.take(20).toList();
+                return Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      recent.join('\n'),
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _widgetDemoCard() {
     return Card(
       child: Padding(
@@ -305,11 +591,12 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
             const SizedBox(height: 4),
             Text(
               'These widgets render straight from the live flag value '
-              '(keys: "new-dashboard", "hero-variant").',
+              '(keys: "new-dashboard", "hero-variant"). Re-evaluated on apply.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             ItFlagAware(
+              key: ValueKey('flagaware-$_widgetRev'),
               flagKey: 'new-dashboard',
               onChild: const ListTile(
                 leading: Icon(Icons.dashboard, color: Colors.green),
@@ -322,6 +609,7 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
             ),
             const Divider(),
             ItExperiment(
+              key: ValueKey('experiment-$_widgetRev'),
               flagKey: 'hero-variant',
               defaultVariant: 'control',
               variants: const {
