@@ -80,6 +80,14 @@ class IntelliToggle {
     applyTargeting(targeting ?? _targeting);
   }
 
+  /// Re-initialize the provider after a transient init failure (it fails closed
+  /// and does not auto-retry). Mints a fresh provider and runs the OAuth+health
+  /// handshake again.
+  Future<void> reconnect({Map<String, dynamic>? targeting}) async {
+    _registered = false;
+    await register(targeting: targeting ?? _targeting);
+  }
+
   /// Replace the global targeting context and rebuild the hooked client so
   /// subsequent evaluations (and the flag-aware widgets) are re-scored.
   void applyTargeting(Map<String, dynamic> targeting) {

@@ -106,6 +106,19 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
     }
   }
 
+  Future<void> _reconnect() async {
+    setState(() {
+      _registering = true;
+      _registerError = null;
+    });
+    try {
+      await IntelliToggle.instance.reconnect(targeting: _targetingMap());
+    } catch (e) {
+      _registerError = e;
+    }
+    if (mounted) setState(() => _registering = false);
+  }
+
   void _applyTargeting() {
     IntelliToggle.instance.applyTargeting(_targetingMap());
     setState(() => _widgetRev++);
@@ -292,17 +305,30 @@ class _IntelliToggleScreenState extends State<IntelliToggleScreen> {
                 Text('Provider: ${provider.metadata.name}',
                     style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
+                if (!ready)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: TextButton.icon(
+                      onPressed: _reconnect,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Reconnect'),
+                    ),
+                  ),
                 Chip(
                   visualDensity: VisualDensity.compact,
                   label: Text(provider.state.name),
                   backgroundColor: ready
                       ? Colors.green.withValues(alpha: 0.18)
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      : Theme.of(context).colorScheme.errorContainer,
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            Text('OAuth2 client-credentials via OpenFeature.',
+            Text(
+                ready
+                    ? 'OAuth2 client-credentials via OpenFeature.'
+                    : 'Provider not ready — the init handshake failed (it fails '
+                        'closed and does not auto-retry). Tap Reconnect.',
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
             row('environment', it.environment),
