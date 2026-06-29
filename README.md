@@ -146,6 +146,7 @@ SaaS **dev** hosts (`DartStreamConfig.dev()` /
 ├── bin/reactive_deepdive.dart     # deep-dive: ds-reactive-dataflow
 ├── bin/persistence_deepdive.dart  # deep-dive: ds-persistence
 ├── bin/oauth2_deepdive.dart       # deep-dive: OAuth2 client_credentials (machine-to-machine, no Firebase user)
+├── bin/intellitoggle_deepdive.dart # deep-dive: IntelliToggle flags via OpenFeature (OAuth client-credentials)
 ├── .env.example                   # config template (placeholders only)
 ├── flutter_client/
 │   └── lib/
@@ -342,6 +343,44 @@ table.
 > browser or Flutter bundle. Public web/Flutter apps keep using the Firebase
 > end-user login above.
 
+### IntelliToggle feature flags (`bin/intellitoggle_deepdive.dart`)
+
+DartStream's own `platform.featureFlags` is tenant-facing CRUD; **IntelliToggle**
+is Aortem's dedicated feature-flag SaaS, consumed through the standard
+**OpenFeature** provider. The published `openfeature_provider_intellitoggle`
+provider performs the OAuth2 **client-credentials** handshake internally — no
+hand-written HTTP, no Firebase user.
+
+**Step 1 — Create an OAuth client** in the IntelliToggle dashboard and copy its
+`clientId` + `clientSecret` + `tenantId` (secret shown once).
+
+**Step 2 — Put them in your local (gitignored) `.env`.**
+
+```sh
+# .env
+INTELLITOGGLE_CLIENT_ID=client_...
+INTELLITOGGLE_CLIENT_SECRET=secret_...
+INTELLITOGGLE_TENANT_ID=...
+# INTELLITOGGLE_API_URL=https://api.intellitoggle.com   # optional host override
+```
+
+**Step 3 — Load the env and run the harness.**
+
+```sh
+set -a && source .env && set +a
+dart run bin/intellitoggle_deepdive.dart
+```
+
+**What it does:** registers the IntelliToggle OpenFeature provider (reaching
+`ProviderState.READY` is the proof the client-credentials exchange succeeded),
+sets the signed-in identity as the global targeting context, evaluates a
+boolean / string / integer / object flag (printing value + reason + variant +
+errorCode), and asserts a deliberately bad secret **fails closed** (never
+silently READY) — then prints a `PASS/FAIL/SKIP` table.
+
+> ⚠️ Same rule as OAuth2 above: the `clientSecret` is for backends / CLIs / CI.
+> The Flutter `IntelliToggle` screen only carries it for a demo/sandbox tenant.
+
 Each Firebase deep-dive bootstraps a tenant, exercises every endpoint in its
 service, and prints a `PASS/FAIL/SKIP` table. CRUD groups self-clean. As of
 2026-06-03: experience 11/11 and reactive 29/29 are fully green; persistence has
@@ -371,6 +410,26 @@ Tips:
   hot-reload and exits immediately otherwise.
 - If you prefer, inline the key:
   `--dart-define=FIREBASE_API_KEY=<your-dartstream-prod-web-key>`.
+
+The **IntelliToggle** screen (Aortem's feature-flag SaaS, via OpenFeature) is
+optional — it stays self-explanatory until you supply OAuth client-credentials.
+To enable it, add the IntelliToggle defines (the provider does the OAuth2
+client-credentials exchange for you):
+
+```sh
+flutter run -d chrome --web-port=3000 \
+  --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY \
+  --dart-define=INTELLITOGGLE_API_URL=$INTELLITOGGLE_API_URL \
+  --dart-define=INTELLITOGGLE_CLIENT_ID=$INTELLITOGGLE_CLIENT_ID \
+  --dart-define=INTELLITOGGLE_CLIENT_SECRET=$INTELLITOGGLE_CLIENT_SECRET \
+  --dart-define=INTELLITOGGLE_TENANT_ID=$INTELLITOGGLE_TENANT_ID
+```
+
+> **Dev vs prod host:** `config.dart` defaults `INTELLITOGGLE_API_URL` to prod
+> (`https://api.intellitoggle.com`). If you created your OAuth client on the
+> **dev** IntelliToggle dashboard, you must pass
+> `INTELLITOGGLE_API_URL=https://dev-api.intellitoggle.com` (as above) or the
+> client-credentials exchange fails with `401 invalid_client`.
 
 ### The login flow
 

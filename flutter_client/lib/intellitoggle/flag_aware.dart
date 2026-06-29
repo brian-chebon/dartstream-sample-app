@@ -1,0 +1,123 @@
+import 'package:flutter/material.dart';
+
+import 'intellitoggle.dart';
+
+/// Renders [onChild] when the IntelliToggle boolean flag [flagKey] is on, and
+/// [offChild] (or nothing) when it is off — a small, dependency-free take on the
+/// IntelliToggle SDK's `FlagAware` widget, built directly on the published
+/// OpenFeature provider so the sample carries no unpublished/path dependency.
+class ItFlagAware extends StatefulWidget {
+  const ItFlagAware({
+    super.key,
+    required this.flagKey,
+    required this.onChild,
+    this.offChild,
+    this.defaultValue = false,
+  });
+
+  final String flagKey;
+  final Widget onChild;
+  final Widget? offChild;
+  final bool defaultValue;
+
+  @override
+  State<ItFlagAware> createState() => _ItFlagAwareState();
+}
+
+class _ItFlagAwareState extends State<ItFlagAware> {
+  bool? _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _evaluate();
+  }
+
+  @override
+  void didUpdateWidget(ItFlagAware oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.flagKey != widget.flagKey) _evaluate();
+  }
+
+  Future<void> _evaluate() async {
+    try {
+      final res = await IntelliToggle.instance.getBoolean(
+        widget.flagKey,
+        defaultValue: widget.defaultValue,
+      );
+      if (mounted) setState(() => _value = res.value);
+    } catch (_) {
+      if (mounted) setState(() => _value = widget.defaultValue);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_value == null) {
+      return const SizedBox(
+        height: 24,
+        width: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return _value! ? widget.onChild : (widget.offChild ?? const SizedBox.shrink());
+  }
+}
+
+/// Picks one of [variants] by evaluating the IntelliToggle string flag
+/// [flagKey] — an A/B/n style widget. Falls back to [defaultVariant] when the
+/// returned value isn't a known variant. Mirrors the SDK's `Experiment` widget.
+class ItExperiment extends StatefulWidget {
+  const ItExperiment({
+    super.key,
+    required this.flagKey,
+    required this.variants,
+    required this.defaultVariant,
+  });
+
+  final String flagKey;
+  final Map<String, Widget> variants;
+  final String defaultVariant;
+
+  @override
+  State<ItExperiment> createState() => _ItExperimentState();
+}
+
+class _ItExperimentState extends State<ItExperiment> {
+  String? _variant;
+
+  @override
+  void initState() {
+    super.initState();
+    _evaluate();
+  }
+
+  Future<void> _evaluate() async {
+    try {
+      final res = await IntelliToggle.instance.getString(
+        widget.flagKey,
+        defaultValue: widget.defaultVariant,
+      );
+      final v = widget.variants.containsKey(res.value)
+          ? res.value
+          : widget.defaultVariant;
+      if (mounted) setState(() => _variant = v);
+    } catch (_) {
+      if (mounted) setState(() => _variant = widget.defaultVariant);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_variant == null) {
+      return const SizedBox(
+        height: 24,
+        width: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return widget.variants[_variant] ??
+        widget.variants[widget.defaultVariant] ??
+        const SizedBox.shrink();
+  }
+}

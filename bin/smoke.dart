@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:openfeature_provider_intellitoggle/openfeature_provider_intellitoggle.dart';
 
 const _firebaseSignIn =
     'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword';
@@ -11,6 +12,7 @@ const _firebaseSignUp =
 
 int _passes = 0;
 int _fails = 0;
+int _skips = 0;
 
 void main(List<String> args) async {
   final env = Platform.environment;
@@ -161,8 +163,70 @@ void main(List<String> args) async {
     );
   });
 
+  // IntelliToggle — Aortem's feature-flag SaaS, evaluated via the OpenFeature
+  // provider. Different auth model from everything above (OAuth2
+  // client-credentials, no Firebase user), so it's optional: skipped unless its
+  // credentials are supplied. See bin/intellitoggle_deepdive.dart for the full
+  // exercise.
+  await _intelliToggleStep(env, userId!);
+
   _summary();
   exit(_fails == 0 ? 0 : 1);
+}
+
+/// One representative IntelliToggle contract: register the OpenFeature provider
+/// (the OAuth2 client-credentials exchange runs inside it — reaching READY is
+/// the proof it worked), then evaluate a single boolean flag against the
+/// signed-in identity.
+Future<void> _intelliToggleStep(Map<String, String> env, String userId) async {
+  print('-- IntelliToggle feature flag (OpenFeature) --');
+  final clientId = env['INTELLITOGGLE_CLIENT_ID']?.trim();
+  final clientSecret = env['INTELLITOGGLE_CLIENT_SECRET']?.trim();
+  final tenantId = env['INTELLITOGGLE_TENANT_ID']?.trim();
+  if ((clientId?.isEmpty ?? true) ||
+      (clientSecret?.isEmpty ?? true) ||
+      (tenantId?.isEmpty ?? true)) {
+    _skip('IntelliToggle — set INTELLITOGGLE_CLIENT_ID / _CLIENT_SECRET / '
+        '_TENANT_ID to include it');
+    return;
+  }
+
+  final apiUrl = (env['INTELLITOGGLE_API_URL']?.trim().isNotEmpty ?? false)
+      ? env['INTELLITOGGLE_API_URL']!.trim()
+      : 'https://api.intellitoggle.com';
+  final flagKey = (env['INTELLITOGGLE_BOOL_FLAG']?.trim().isNotEmpty ?? false)
+      ? env['INTELLITOGGLE_BOOL_FLAG']!.trim()
+      : 'new-dashboard';
+
+  try {
+    final provider = IntelliToggleProvider(
+      clientId: clientId!,
+      clientSecret: clientSecret!,
+      tenantId: tenantId!,
+      options: IntelliToggleOptions.production(baseUri: Uri.parse(apiUrl)),
+    );
+    try {
+      await OpenFeatureAPI().setProvider(provider);
+    } catch (_) {
+      // setProvider keeps the provider in ERROR state rather than throwing.
+    }
+    if (provider.state != ProviderState.READY) {
+      _fail('IntelliToggle provider not READY (state=${provider.state.name}) '
+          '— check client-credentials / INTELLITOGGLE_API_URL');
+      return;
+    }
+    OpenFeatureAPI()
+        .setGlobalContext(OpenFeatureEvaluationContext({'userId': userId}));
+    final res = await provider
+        .getBooleanFlag(flagKey, false)
+        .timeout(const Duration(seconds: 20));
+    _pass('IntelliToggle getBooleanFlag("$flagKey") -> value=${res.value} '
+        'reason=${res.reason}');
+  } on TimeoutException {
+    _fail('IntelliToggle -> TIMEOUT after 20s');
+  } catch (e) {
+    _fail('IntelliToggle -> exception: $e');
+  }
 }
 
 (String?, String?) _extractIds(String body) {
@@ -338,6 +402,11 @@ void _fail(String msg) {
   print('   [FAIL] $msg');
 }
 
+void _skip(String msg) {
+  _skips++;
+  print('   [SKIP] $msg');
+}
+
 void _fatal(String msg) {
   stderr.writeln('FATAL: $msg');
   exit(2);
@@ -345,5 +414,5 @@ void _fatal(String msg) {
 
 void _summary() {
   print('');
-  print('== Summary: $_passes pass, $_fails fail ==');
+  print('== Summary: $_passes pass, $_fails fail, $_skips skip ==');
 }

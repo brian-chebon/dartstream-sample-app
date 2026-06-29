@@ -4,6 +4,7 @@ import '../state/session.dart';
 import 'experience_screen.dart';
 import 'feature_flags_screen.dart';
 import 'home_screen.dart';
+import 'intellitoggle_screen.dart';
 import 'persistence_screen.dart';
 import 'profile_screen.dart';
 import 'reactive_screen.dart';
@@ -40,6 +41,12 @@ class _ShellScreenState extends State<ShellScreen> {
       icon: Icons.flag_outlined,
       selectedIcon: Icons.flag,
       builder: () => FeatureFlagsScreen(session: widget.session),
+    ),
+    _Feature(
+      label: 'IntelliToggle',
+      icon: Icons.toggle_on_outlined,
+      selectedIcon: Icons.toggle_on,
+      builder: () => IntelliToggleScreen(session: widget.session),
     ),
     _Feature(
       label: 'Experience',

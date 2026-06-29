@@ -8,3 +8,10 @@ environment:
 
 dependencies:
   http: ^1.2.2
+
+  # IntelliToggle (Aortem feature-flag SaaS) via OpenFeature — used by
+  # bin/intellitoggle_deepdive.dart. Pure-Dart, so it runs in this CLI exactly
+  # as the Flutter client uses it. The provider does the OAuth2
+  # client-credentials exchange internally.
+  openfeature_dart_server_sdk: ^0.0.22
+  openfeature_provider_intellitoggle: ^0.0.9

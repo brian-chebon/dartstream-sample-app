@@ -10,6 +10,11 @@
 .pub/
 build/
 
+# Firebase Hosting (local deploy config + cache — never commit)
+.firebase/
+.firebaserc
+firebase.json
+
 # IDE
 .idea/
 *.iml
