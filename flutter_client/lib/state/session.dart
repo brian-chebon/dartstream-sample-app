@@ -1,6 +1,7 @@
 import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flutter/foundation.dart';
 
+import '../auth/google_auth.dart';
 import '../config.dart';
 
 enum SessionStatus { signedOut, signingIn, signedIn, error }
@@ -47,6 +48,26 @@ class Session extends ChangeNotifier {
           password: password,
         ),
       );
+
+  /// Federated sign-in with Google (web only). Obtains a Firebase ID token via
+  /// Google Identity Services + Identity Toolkit, then onboards a DartStream
+  /// session through the SDK's provider path — the same [DartStreamConnection]
+  /// the email/password flow produces. Email/password is untouched; additive.
+  Future<void> signInWithGoogle() => _authenticate(() async {
+        final firebaseIdToken = await signInWithGoogleFirebaseIdToken(
+          clientId: AppConfig.googleOAuthClientId,
+          firebaseApiKey: AppConfig.firebaseApiKey,
+        );
+        final client = DartStreamClient(config: AppConfig.dartStream);
+        final session = await client.auth.onboardProviderIdToken(
+          provider: DartStreamAuthProvider.google,
+          firebaseIdToken: firebaseIdToken,
+        );
+        return DartStreamConnection(
+          client: client.withSession(session),
+          session: session,
+        );
+      });
 
   Future<void> _authenticate(
     Future<DartStreamConnection> Function() connect,

@@ -431,6 +431,39 @@ flutter run -d chrome --web-port=3000 \
 > `INTELLITOGGLE_API_URL=https://dev-api.intellitoggle.com` (as above) or the
 > client-credentials exchange fails with `401 invalid_client`.
 
+### Sign in with Google (optional)
+
+Alongside email/password, the login screen can show a **Continue with Google**
+button — an additive end-user path, not machine-to-machine (no client secret in
+the bundle). The flow stays pure-REST (no FlutterFire):
+
+1. Google Identity Services (GIS) returns a Google credential.
+2. Firebase Identity Toolkit `accounts:signInWithIdp` exchanges it for a
+   Firebase ID token.
+3. The SDK's `client.auth.onboardProviderIdToken(provider: google, …)` bootstraps
+   the DartStream session — the same `DartStreamConnection` email/password yields.
+
+The button only appears when a Google **web** client ID is injected:
+
+```sh
+flutter run -d chrome --web-port=3000 \
+  --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY \
+  --dart-define=GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID
+```
+
+| Define | Value |
+| --- | --- |
+| `GOOGLE_OAUTH_CLIENT_ID` | the **`dartstream-prod`** Google OAuth **web** client ID (`…apps.googleusercontent.com`) — the same project as `FIREBASE_API_KEY` |
+
+The Google client ID, the Google provider, and `FIREBASE_API_KEY` must all belong
+to the **same** project (`dartstream-prod`) — otherwise the Identity Toolkit IdP
+exchange issues a token that project won't federate (or the backend won't trust).
+One-time setup in the `dartstream-prod` Firebase / Google Cloud console: enable
+**Google** as a sign-in provider; add the app origin (`http://localhost:3000` and
+the deployed host) to the OAuth client's **Authorized JavaScript origins**. The
+client ID is public-by-design but kept out of source control via `--dart-define`,
+same as `FIREBASE_API_KEY`.
+
 ### The login flow
 
 The login screen has a **Create Account / Sign In** toggle taking real

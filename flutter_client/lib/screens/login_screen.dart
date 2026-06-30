@@ -175,6 +175,38 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+                  if (AppConfig.hasGoogleSignIn) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: const [
+                        Expanded(child: Divider()),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('or'),
+                        ),
+                        Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: busy || !hasKey
+                          ? null
+                          : widget.session.signInWithGoogle,
+                      icon: const Text(
+                        'G',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                      label: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          busy ? 'Please wait…' : 'Continue with Google',
+                        ),
+                      ),
+                    ),
+                  ],
                   TextButton(
                     onPressed: busy
                         ? null

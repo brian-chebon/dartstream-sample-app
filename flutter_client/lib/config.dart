@@ -14,6 +14,22 @@ class AppConfig {
   /// Whether a key was actually injected; the login flow surfaces this.
   static bool get hasFirebaseApiKey => firebaseApiKey.isNotEmpty;
 
+  /// Google OAuth 2.0 **web** client ID used by the web "Continue with Google"
+  /// flow (Google Identity Services). Injected at build time, never committed:
+  ///   `--dart-define=GOOGLE_OAUTH_CLIENT_ID=<id>.apps.googleusercontent.com`
+  ///
+  /// Must belong to the **same Firebase project** as [firebaseApiKey]
+  /// (`dartstream-prod`) so the Identity Toolkit IdP exchange issues a token the
+  /// backend trusts. Live requirements: Google enabled as a sign-in provider in
+  /// that project, and the app origin added to the OAuth client's authorized
+  /// JavaScript origins (e.g. http://localhost:3000 and the deployed host).
+  static const googleOAuthClientId =
+      String.fromEnvironment('GOOGLE_OAUTH_CLIENT_ID');
+
+  /// Whether a Google web client ID was injected; the login screen shows the
+  /// "Continue with Google" button only when present.
+  static bool get hasGoogleSignIn => googleOAuthClientId.isNotEmpty;
+
   /// The DartStream SaaS dev environment, wired with our Firebase web key.
   /// Swap `.dev()` for `.prod()` to point at production.
   static DartStreamConfig get dartStream =>

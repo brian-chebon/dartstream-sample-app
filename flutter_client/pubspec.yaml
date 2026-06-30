@@ -35,6 +35,10 @@ dependencies:
   flame: ^1.21.0
   dartstream_client: ^0.0.1
 
+  # Used by the web Google sign-in flow to call the Firebase Identity Toolkit
+  # `accounts:signInWithIdp` REST endpoint (lib/auth/google_auth_web.dart).
+  http: ^1.2.2
+
   # IntelliToggle — the official Aortem feature-flag SaaS — consumed through
   # OpenFeature. The provider does the OAuth2 client-credentials exchange
   # internally; we only register it and evaluate flags via the OpenFeature API.
