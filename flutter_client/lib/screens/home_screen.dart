@@ -4,7 +4,7 @@ import 'package:dartstream_client/dartstream_client.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
-import '../game/dartstream_dash.dart';
+import '../game/shard_pilot.dart';
 import '../state/session.dart';
 import '../theme/app_theme.dart';
 
@@ -31,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
     environmentId: _environmentId,
   );
 
-  late DartstreamDashGame _game;
+  late ShardPilotGame _game;
   bool _loading = true;
   Object? _bootstrapError;
 
@@ -86,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _resumeSummary =
           'high ${config.resumeHighScore} · '
           'coins ${config.resumeLifetimeCoins}';
-      _game = DartstreamDashGame(
+      _game = ShardPilotGame(
         config: config,
         onSnapshot: _onSnapshot,
         onEvent: _onEvent,
@@ -108,7 +108,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Maps live feature flags + inventory + a cloud-save snapshot into the
   /// gameplay config — this is where DartStream services drive the game.
-  DashConfig _buildConfig(
+  PilotConfig _buildConfig(
     List<dynamic> flags,
     List<dynamic> inventory,
     Map payload,
@@ -133,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final name = (p['displayName'] ?? p['display_name'] ?? 'Player').toString();
     int asInt(Object? v) => v is int ? v : 0;
 
-    return DashConfig(
+    return PilotConfig(
       startLives: enabled.contains('extra_life') ? 4 : 3,
       doubleScore: enabled.contains('double_score'),
       hardMode: enabled.contains('hard_mode'),
@@ -316,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'DartStream Dash',
+                  'Shard Pilot',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w800,
@@ -387,13 +387,16 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _panel(
-          title: 'DartStream Dash — how to play',
+          title: 'Shard Pilot — how to play',
           child: const Text(
-            'Drag (or ←/→) to move, catch coins, dodge bombs. '
-            'Tap or Space uses the sword (from inventory) to clear bombs.\n\n'
-            'DartStream drives the rules: feature flags double_score / hard_mode '
-            '/ extra_life change gameplay; inventory grants the sword; cloud-save '
-            'persists & resumes your high score; every beat logs a reactive event.',
+            'Drag (or ←/→/↑/↓, WASD) to fly; cannons fire automatically at the '
+            'swarm. Tap or Space fires an EMP (from inventory) to clear the screen. '
+            'Dodge enemies (a hit gives you brief shield-flash immunity) and grab '
+            'the glowing cyan shards for bonus points.\n\n'
+            'DartStream drives the rules: feature flags double_score (twin cannons) '
+            '/ hard_mode (swarm) / extra_life (extra shield) change gameplay; '
+            'inventory grants the EMP; cloud-save persists & resumes your high '
+            'score; every beat logs a reactive event.',
           ),
         ),
         _panel(
