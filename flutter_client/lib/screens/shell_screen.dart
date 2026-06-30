@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../state/session.dart';
+import '../theme/app_theme.dart';
 import 'experience_screen.dart';
 import 'feature_flags_screen.dart';
 import 'home_screen.dart';
@@ -82,79 +83,114 @@ class _ShellScreenState extends State<ShellScreen> {
       children: [for (final f in _features) f.builder()],
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('DartStream · ${_features[_index].label}'),
-        actions: [
-          if (session.email != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Center(child: Text(session.email!)),
-            ),
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout),
-            onPressed: session.signOut,
-          ),
-        ],
-      ),
-      drawer: useDrawer
-          ? Drawer(
-              child: SafeArea(
-                child: ListView(
+    return BrandBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          titleSpacing: 20,
+          title: DartStreamWordmark(subtitle: _features[_index].label),
+          actions: [
+            if (session.email != null)
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.1),
+                  ),
+                ),
+                child: Row(
                   children: [
-                    for (var i = 0; i < _features.length; i++)
-                      ListTile(
-                        leading: Icon(i == _index
-                            ? _features[i].selectedIcon
-                            : _features[i].icon),
-                        title: Text(_features[i].label),
-                        selected: i == _index,
-                        onTap: () {
-                          setState(() => _index = i);
-                          Navigator.pop(context);
-                        },
+                    const Icon(Icons.person, size: 14, color: AppColors.accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      session.email!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.7),
                       ),
+                    ),
                   ],
                 ),
               ),
-            )
-          : null,
-      body: wide
-          ? Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: _index,
-                  onDestinationSelected: (i) => setState(() => _index = i),
-                  labelType: NavigationRailLabelType.all,
-                  destinations: [
-                    for (final f in _features)
-                      NavigationRailDestination(
-                        icon: Icon(f.icon),
-                        selectedIcon: Icon(f.selectedIcon),
-                        label: Text(f.label),
-                      ),
-                  ],
-                ),
-                const VerticalDivider(width: 1),
-                Expanded(child: body),
-              ],
-            )
-          : body,
-      bottomNavigationBar: useBottomBar
-          ? NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
-              destinations: [
-                for (final f in _features)
-                  NavigationDestination(
-                    icon: Icon(f.icon),
-                    selectedIcon: Icon(f.selectedIcon),
-                    label: f.label,
+            IconButton(
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout, size: 20),
+              color: Colors.white.withValues(alpha: 0.6),
+              onPressed: session.signOut,
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        drawer: useDrawer
+            ? Drawer(
+                child: SafeArea(
+                  child: ListView(
+                    children: [
+                      for (var i = 0; i < _features.length; i++)
+                        ListTile(
+                          leading: Icon(
+                            i == _index
+                                ? _features[i].selectedIcon
+                                : _features[i].icon,
+                          ),
+                          title: Text(_features[i].label),
+                          selected: i == _index,
+                          onTap: () {
+                            setState(() => _index = i);
+                            Navigator.pop(context);
+                          },
+                        ),
+                    ],
                   ),
-              ],
-            )
-          : null,
+                ),
+              )
+            : null,
+        body: wide
+            ? Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: _index,
+                    onDestinationSelected: (i) => setState(() => _index = i),
+                    labelType: NavigationRailLabelType.all,
+                    leading: const Padding(
+                      padding: EdgeInsets.only(top: 8, bottom: 16),
+                      child: DartStreamLogo(size: 30),
+                    ),
+                    destinations: [
+                      for (final f in _features)
+                        NavigationRailDestination(
+                          icon: Icon(f.icon),
+                          selectedIcon: Icon(f.selectedIcon),
+                          label: Text(f.label),
+                        ),
+                    ],
+                  ),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: body),
+                ],
+              )
+            : body,
+        bottomNavigationBar: useBottomBar
+            ? NavigationBar(
+                selectedIndex: _index,
+                onDestinationSelected: (i) => setState(() => _index = i),
+                destinations: [
+                  for (final f in _features)
+                    NavigationDestination(
+                      icon: Icon(f.icon),
+                      selectedIcon: Icon(f.selectedIcon),
+                      label: f.label,
+                    ),
+                ],
+              )
+            : null,
+      ),
     );
   }
 }

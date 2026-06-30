@@ -39,6 +39,9 @@ dependencies:
   # `accounts:signInWithIdp` REST endpoint (lib/auth/google_auth_web.dart).
   http: ^1.2.2
 
+  # Brand typography (Inter) for the app theme — see lib/theme/app_theme.dart.
+  google_fonts: ^6.2.1
+
   # IntelliToggle — the official Aortem feature-flag SaaS — consumed through
   # OpenFeature. The provider does the OAuth2 client-credentials exchange
   # internally; we only register it and evaluate flags via the OpenFeature API.

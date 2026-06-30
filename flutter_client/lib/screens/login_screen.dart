@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config.dart';
 import '../state/session.dart';
+import '../theme/app_theme.dart';
 
 enum AuthMode { signUp, signIn }
 
@@ -73,161 +74,174 @@ class _LoginScreenState extends State<LoginScreen> {
     final busy = widget.session.status == SessionStatus.signingIn;
     final hasKey = AppConfig.hasFirebaseApiKey;
     final error = _localError ?? widget.session.errorMessage;
-    return Scaffold(
-      appBar: AppBar(title: const Text('DartStream E2E Client')),
-      body: Center(
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    _isSignUp ? 'Create your account' : 'Welcome back',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Authenticates via Firebase, then bootstraps a tenant '
-                    'through /api/v1/auth on the DartStream backend.',
-                    textAlign: TextAlign.center,
-                  ),
-                  if (!hasKey) ...[
-                    const SizedBox(height: 16),
-                    _Banner(
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      textColor: Theme.of(context).colorScheme.onErrorContainer,
-                      text: 'No Firebase API key injected. Run with '
-                          '--dart-define=FIREBASE_API_KEY=<key> (see README).',
+    return BrandBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Center(child: DartStreamLogo(size: 56)),
+                    const SizedBox(height: 24),
+                    Text(
+                      _isSignUp ? 'Create your account' : 'Welcome back',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                      textAlign: TextAlign.center,
                     ),
-                  ],
-                  const SizedBox(height: 24),
-                  SegmentedButton<AuthMode>(
-                    segments: const [
-                      ButtonSegment(
-                        value: AuthMode.signUp,
-                        label: Text('Create Account'),
-                        icon: Icon(Icons.person_add_alt),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Authenticates via Firebase, then bootstraps a tenant '
+                      'through /api/v1/auth on the DartStream backend.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.55),
                       ),
-                      ButtonSegment(
-                        value: AuthMode.signIn,
-                        label: Text('Sign In'),
-                        icon: Icon(Icons.login),
+                    ),
+                    if (!hasKey) ...[
+                      const SizedBox(height: 16),
+                      _Banner(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        textColor: Theme.of(
+                          context,
+                        ).colorScheme.onErrorContainer,
+                        text:
+                            'No Firebase API key injected. Run with '
+                            '--dart-define=FIREBASE_API_KEY=<key> (see README).',
                       ),
                     ],
-                    selected: {_mode},
-                    onSelectionChanged: busy
-                        ? null
-                        : (s) => _setMode(s.first),
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      hintText: 'you@example.com',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 24),
+                    SegmentedButton<AuthMode>(
+                      segments: const [
+                        ButtonSegment(
+                          value: AuthMode.signUp,
+                          label: Text('Create Account'),
+                          icon: Icon(Icons.person_add_alt),
+                        ),
+                        ButtonSegment(
+                          value: AuthMode.signIn,
+                          label: Text('Sign In'),
+                          icon: Icon(Icons.login),
+                        ),
+                      ],
+                      selected: {_mode},
+                      onSelectionChanged: busy
+                          ? null
+                          : (s) => _setMode(s.first),
                     ),
-                    enabled: !busy,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _password,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      helperText: 'At least 6 characters',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      autofillHints: const [AutofillHints.email],
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        hintText: 'you@example.com',
+                        border: OutlineInputBorder(),
+                      ),
+                      enabled: !busy,
                     ),
-                    obscureText: true,
-                    enabled: !busy,
-                    onSubmitted: (_) => _isSignUp ? null : _submit(),
-                  ),
-                  if (_isSignUp) ...[
                     const SizedBox(height: 12),
                     TextField(
-                      controller: _confirm,
+                      controller: _password,
                       decoration: const InputDecoration(
-                        labelText: 'Confirm password',
+                        labelText: 'Password',
+                        helperText: 'At least 6 characters',
                         border: OutlineInputBorder(),
                       ),
                       obscureText: true,
                       enabled: !busy,
-                      onSubmitted: (_) => _submit(),
+                      onSubmitted: (_) => _isSignUp ? null : _submit(),
                     ),
-                  ],
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: busy || !hasKey ? null : _submit,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        busy
-                            ? 'Please wait…'
-                            : _isSignUp
-                                ? 'Create Account'
-                                : 'Sign In',
-                      ),
-                    ),
-                  ),
-                  if (AppConfig.hasGoogleSignIn) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      children: const [
-                        Expanded(child: Divider()),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('or'),
+                    if (_isSignUp) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _confirm,
+                        decoration: const InputDecoration(
+                          labelText: 'Confirm password',
+                          border: OutlineInputBorder(),
                         ),
-                        Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    OutlinedButton.icon(
-                      onPressed: busy || !hasKey
-                          ? null
-                          : widget.session.signInWithGoogle,
-                      icon: const Text(
-                        'G',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
+                        obscureText: true,
+                        enabled: !busy,
+                        onSubmitted: (_) => _submit(),
                       ),
-                      label: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                    ],
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: busy || !hasKey ? null : _submit,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Text(
-                          busy ? 'Please wait…' : 'Continue with Google',
+                          busy
+                              ? 'Please wait…'
+                              : _isSignUp
+                              ? 'Create Account'
+                              : 'Sign In',
                         ),
                       ),
                     ),
-                  ],
-                  TextButton(
-                    onPressed: busy
-                        ? null
-                        : () => _setMode(
+                    if (AppConfig.hasGoogleSignIn) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: const [
+                          Expanded(child: Divider()),
+                          Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 12),
+                            child: Text('or'),
+                          ),
+                          Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: busy || !hasKey
+                            ? null
+                            : widget.session.signInWithGoogle,
+                        icon: const Text(
+                          'G',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        label: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            busy ? 'Please wait…' : 'Continue with Google',
+                          ),
+                        ),
+                      ),
+                    ],
+                    TextButton(
+                      onPressed: busy
+                          ? null
+                          : () => _setMode(
                               _isSignUp ? AuthMode.signIn : AuthMode.signUp,
                             ),
-                    child: Text(
-                      _isSignUp
-                          ? 'Already have an account? Sign in'
-                          : "Don't have an account? Create one",
+                      child: Text(
+                        _isSignUp
+                            ? 'Already have an account? Sign in'
+                            : "Don't have an account? Create one",
+                      ),
                     ),
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 8),
-                    _Banner(
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      textColor: Theme.of(context).colorScheme.onErrorContainer,
-                      text: error,
-                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      _Banner(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        textColor: Theme.of(
+                          context,
+                        ).colorScheme.onErrorContainer,
+                        text: error,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

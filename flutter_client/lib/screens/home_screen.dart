@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../game/dartstream_dash.dart';
 import '../state/session.dart';
+import '../theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.session});
@@ -76,12 +77,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final snapshot = results[3] as Map<String, dynamic>?;
       final channels = results[4] as List;
 
-      final payload = (snapshot?['snapshot'] is Map &&
+      final payload =
+          (snapshot?['snapshot'] is Map &&
               (snapshot!['snapshot'] as Map)['payload'] is Map)
           ? (snapshot['snapshot'] as Map)['payload'] as Map
           : const {};
       final config = _buildConfig(flagsList, items, payload, profile);
-      _resumeSummary = 'high ${config.resumeHighScore} · '
+      _resumeSummary =
+          'high ${config.resumeHighScore} · '
           'coins ${config.resumeLifetimeCoins}';
       _game = DartstreamDashGame(
         config: config,
@@ -114,21 +117,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final enabled = <String>{};
     for (final f in flags) {
       if (f is Map && (f['enabled'] == true || f['status'] == 'active')) {
-        final key = (f['key'] ?? f['flag_key'] ?? f['flagKey'] ?? '').toString();
+        final key = (f['key'] ?? f['flag_key'] ?? f['flagKey'] ?? '')
+            .toString();
         if (key.isNotEmpty) enabled.add(key);
       }
     }
     int swordCharges = 0;
     for (final item in inventory) {
-      if (item is Map &&
-          (item['itemId'] ?? item['id']) == 'starter-sword') {
+      if (item is Map && (item['itemId'] ?? item['id']) == 'starter-sword') {
         final qty = item['quantity'];
         swordCharges = (qty is int && qty > 0) ? qty.clamp(1, 3) : 1;
       }
     }
     final p = (profile['profile'] is Map) ? profile['profile'] as Map : profile;
-    final name =
-        (p['displayName'] ?? p['display_name'] ?? 'Player').toString();
+    final name = (p['displayName'] ?? p['display_name'] ?? 'Player').toString();
     int asInt(Object? v) => v is int ? v : 0;
 
     return DashConfig(
@@ -192,63 +194,191 @@ class _HomeScreenState extends State<HomeScreen> {
     return _loading
         ? const Center(child: CircularProgressIndicator())
         : _bootstrapError != null
-            ? _errorView()
-            : _layout();
+        ? _errorView()
+        : _layout();
   }
 
   Widget _errorView() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Bootstrap failed: $_bootstrapError',
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () {
-                  setState(() {
-                    _loading = true;
-                    _bootstrapError = null;
-                  });
-                  _bootstrap();
-                },
-                child: const Text('Retry'),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Bootstrap failed: $_bootstrapError',
+            textAlign: TextAlign.center,
           ),
-        ),
-      );
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () {
+              setState(() {
+                _loading = true;
+                _bootstrapError = null;
+              });
+              _bootstrap();
+            },
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _layout() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth > 900;
-        final game = ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: AspectRatio(aspectRatio: 4 / 3, child: GameWidget(game: _game)),
+        final gameWidget = GameWidget(game: _game);
+        final gameDecoration = BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
         );
         final panels = _panels();
         return Padding(
           padding: const EdgeInsets.all(16),
           child: wide
-              ? Row(
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: game),
-                    const SizedBox(width: 16),
-                    SizedBox(
-                      width: 360,
-                      // Panels can exceed the viewport height; let them scroll.
-                      child: SingleChildScrollView(child: panels),
+                    _hero(),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Game fills the full height of the content area.
+                          Expanded(
+                            flex: 4,
+                            child: Container(
+                              clipBehavior: Clip.antiAlias,
+                              decoration: gameDecoration,
+                              child: gameWidget,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 340,
+                            // Panels can exceed the viewport height; let them scroll.
+                            child: SingleChildScrollView(child: panels),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 )
               : ListView(
-                  children: [game, const SizedBox(height: 16), panels],
+                  children: [
+                    _hero(),
+                    const SizedBox(height: 12),
+                    Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: gameDecoration,
+                      child: AspectRatio(aspectRatio: 4 / 3, child: gameWidget),
+                    ),
+                    const SizedBox(height: 16),
+                    panels,
+                  ],
                 ),
         );
       },
+    );
+  }
+
+  Widget _hero() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            AppColors.accent.withValues(alpha: 0.16),
+            AppColors.violet.withValues(alpha: 0.08),
+          ],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          const DartStreamLogo(size: 34),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'DartStream Dash',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Live demo game driven by DartStream — flags, inventory, '
+                  'cloud-save & reactive events.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          _heroStat(
+            'HIGH',
+            _resumeSummary.contains('high')
+                ? _resumeSummary.split('·').first.replaceAll('high', '').trim()
+                : '—',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroStat(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              color: AppColors.accent,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -284,22 +414,19 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        _panel(
-          title: 'Last reactive event',
-          child: Text(_lastEvent),
-        ),
+        _panel(title: 'Last reactive event', child: Text(_lastEvent)),
         _panel(
           title: 'Profile (experience/profiles/me)',
           child: Text(
             _profile == null
                 ? '—'
                 : (_profile!['profile'] is Map
-                    ? _kvLines(_profile!['profile'] as Map, const [
-                        'displayName',
-                        'providerKey',
-                        'mode',
-                      ])
-                    : _profile!.toString()),
+                      ? _kvLines(_profile!['profile'] as Map, const [
+                          'displayName',
+                          'providerKey',
+                          'mode',
+                        ])
+                      : _profile!.toString()),
           ),
         ),
         _panel(
@@ -341,18 +468,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _panel({required String title, required Widget child}) {
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            child,
-          ],
-        ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.accent,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          DefaultTextStyle.merge(
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontSize: 13,
+              height: 1.4,
+            ),
+            child: child,
+          ),
+        ],
       ),
     );
   }

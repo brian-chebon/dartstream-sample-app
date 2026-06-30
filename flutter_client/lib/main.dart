@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/shell_screen.dart';
 import 'state/session.dart';
+import 'theme/app_theme.dart';
 
 void main() => runApp(const DartstreamApp());
 
@@ -32,10 +33,9 @@ class _DartstreamAppState extends State<DartstreamApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'DartStream E2E',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3DBEFF)),
-        useMaterial3: true,
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
+      themeMode: ThemeMode.dark,
       home: _session.status == SessionStatus.signedIn
           ? ShellScreen(session: _session)
           : LoginScreen(session: _session),
